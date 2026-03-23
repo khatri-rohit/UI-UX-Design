@@ -16,7 +16,7 @@ export const runtime = "nodejs";
 const STAGE1_MODELS = ["qwen3.5:9b", "llama3.2-vision:11b", "llama3.1:8b"];
 const STAGE2_MODELS = ["qwen3.5:9b", "llama3.1:8b", "mistral:7b"];
 const STAGE3_MODELS = [
-  "minimax-m2.7:cloud",
+  // "minimax-m2.7:cloud",
   "deepseek-v3.1:671b-cloud",
   "qwen3.5:9b",
   "llama3.2-vision:11b",

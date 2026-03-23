@@ -77,6 +77,49 @@ ReactDOM.render(React.createElement(Component), document.getElementById('root'))
 } catch(e) {
   document.getElementById('root').innerHTML = '<div id="error">Runtime error:\\n' + e.message + '</div>'
 }
+
+// Dimension reporter — runs after React renders
+(function() {
+  function reportSize() {
+    const body = document.body
+    const html = document.documentElement
+
+    const width = Math.max(
+      body.scrollWidth, body.offsetWidth,
+      html.scrollWidth, html.offsetWidth,
+      html.clientWidth
+    )
+      
+    const height = Math.max(
+      body.scrollHeight, body.offsetHeight,
+      html.scrollHeight, html.offsetHeight,
+      html.clientHeight
+    )
+    console.log('Reporting width ', { body.scrollWidth, body.offsetWidth,
+      html.scrollWidth, html.offsetWidth,
+      html.clientWidth})
+      console.log('Reporting Height ',{ body.scrollHeight, body.offsetHeight,
+      html.scrollHeight, html.offsetHeight,
+      html.clientHeight})
+    window.parent.postMessage({
+      type: 'iframe-resize',
+      screenName: '${screenName}',
+      width,
+      height,
+    }, '*')
+  }
+
+  // Report after first paint
+  if (document.readyState === 'complete') {
+    reportSize()
+  } else {
+    window.addEventListener('load', reportSize)
+  }
+
+  // Re-report if content changes (lazy images, dynamic content)
+  const ro = new ResizeObserver(() => reportSize())
+  ro.observe(document.body)
+})()
 </script>
 </body>
 </html>`;
