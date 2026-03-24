@@ -12,6 +12,21 @@ Design quality bar (critical):
 - Keep responsiveness: mobile-first and desktop-ready structure.
 `.trim();
 
+const INTENT_LOCK_DIRECTIVE = `
+Intent lock (critical):
+- Implement only what the user asks for; do not invent features, sections, or flows.
+- If details are missing, choose conservative defaults without adding new product scope.
+- Keep content and component choices tightly aligned to the prompt intent.
+`.trim();
+
+const SKILL_DIRECTIVE = `
+Skill-guided UI system:
+- Use design-system token logic: clear primitive -> semantic -> component styling structure.
+- Prefer shadcn-style component composition patterns when stylingLib is "shadcn".
+- Keep interactive states explicit (hover, focus-visible, active, disabled) for controls.
+- Avoid repetitive card-grid boilerplate unless explicitly requested.
+`.trim();
+
 const COMPILE_GUARDRAILS = `
 Compilation guardrails (must pass):
 - Output valid TSX only. No markdown, no prose.
@@ -29,12 +44,14 @@ Given a user prompt, output ONLY valid JSON matching this schema exactly.
 No explanation. No markdown. Pure JSON only.
 
 ${CREATIVITY_DIRECTIVE}
+${INTENT_LOCK_DIRECTIVE}
+${SKILL_DIRECTIVE}
 
 Output this exact structure:
 {
   "screens": ["ScreenName"],
   "navPattern": "top-nav|sidebar|hybrid|none",
-  "platform": "web",
+  "platform": "web|mobile",
   "colorMode": "dark|light",
   "primaryColor": "#hex",
   "accentColor": "#hex",
@@ -50,6 +67,7 @@ Given a WebAppSpec JSON,
 output ONLY a JSON array. No explanation. No markdown.
 
 ${CREATIVITY_DIRECTIVE}
+${INTENT_LOCK_DIRECTIVE}
 
 Each item: { "screen": "name", "components": ["list"], "canvasX": number, "canvasY": number }
 Space screens 240px apart horizontally starting at x=60, y=80.
@@ -64,11 +82,15 @@ Rules (follow exactly):
 - Do NOT export anything
 - TypeScript + TSX only
 - Use inline styles or simple className strings that do not rely on external CSS frameworks
+- Do not include external script tags (especially cdn.tailwindcss.com)
+- Do not put CSS at-rules like @media inside React style objects; use responsive layout logic or plain CSS blocks instead
 - Keep output self-contained in one file and include small inline mock data where useful
 - Return code only. No markdown fences. No explanations.
 - End your response with exactly: // === END ===
 
 ${CREATIVITY_DIRECTIVE}
+${INTENT_LOCK_DIRECTIVE}
+${SKILL_DIRECTIVE}
 ${COMPILE_GUARDRAILS}
 `.trim();
 
@@ -81,7 +103,7 @@ export const WEB_APP_SPEC_SCHEMA = {
       type: "string",
       enum: ["top-nav", "sidebar", "hybrid", "none"],
     },
-    platform: { type: "string", enum: ["web"] },
+    platform: { type: "string", enum: ["web", "mobile"] },
     colorMode: { type: "string", enum: ["dark", "light"] },
     primaryColor: { type: "string" },
     accentColor: { type: "string" },
@@ -105,6 +127,7 @@ export function buildScreenPrompt(
   spec: WebAppSpec,
   tree: ComponentTreeNode[],
   screen: string,
+  userPrompt: string,
 ): string {
   const node = tree.find((n) => n.screen === screen);
   const components = node?.components ?? [];
@@ -113,6 +136,7 @@ export function buildScreenPrompt(
 Generate a React web screen component for: ${screen}
 
 App context:
+- Original user prompt: ${userPrompt}
 - Platform: ${spec.platform}
 - Color mode: ${spec.colorMode}
 - Primary color: ${spec.primaryColor}
@@ -129,6 +153,8 @@ Requirements:
 - No imports and no exports
 - Do not use React Native components/APIs
 - Use only web/DOM elements and browser-safe React patterns
+- If platform is mobile, use compact spacing, touch-friendly hit areas, and phone-like content proportions
+- If platform is web, design for desktop width and natural full-page vertical flow
 - Return code only (no markdown)
 - End with exactly: // === END ===
 
@@ -139,6 +165,10 @@ Creative direction from design skill system:
 - Include hover/focus/active visual states on interactive UI.
 - Add subtle staged reveal patterns for key content blocks.
 - Avoid repetitive card-grid boilerplate unless the prompt explicitly asks for it.
+
+Intent lock:
+- Do not add any product feature or section that is not implied by the prompt.
+- Keep labels, modules, and interactions grounded in the requested scenario only.
 
 Syntax safety checklist:
 - Ensure all JSX tags are closed.

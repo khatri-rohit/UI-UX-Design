@@ -8,24 +8,80 @@ import {
   STAGE2_SYSTEM,
   STAGE3_SYSTEM,
 } from "@/lib/prompts";
-import { ComponentTreeNode, WebAppSpec } from "@/lib/types";
+import { ComponentTreeNode, GenerationPlatform, WebAppSpec } from "@/lib/types";
 import logger from "@/lib/logger";
+import { buildEnhancedPrompt } from "@/lib/promptEnhancer";
 
 export const runtime = "nodejs";
 
 const STAGE1_MODELS = ["llama3.2-vision:11b", "llama3.1:8b"];
 // const STAGE1_MODELS = ["gpt-oss:120b-cloud"];
 // const STAGE2_MODELS = ["gpt-oss:120b-cloud"];
-const STAGE2_MODELS = ["llama3.1:8b", "mistral:7b"];
+const STAGE2_MODELS = [
+  "llama3.1:8b",
+  "mistral:7b",
+  "gpt-oss:120b-cloud",
+  "llama3.2-vision:11b",
+  "deepseek-v3.1:671b-cloud",
+];
 const STAGE3_MODELS = [
   // "minimax-m2.7:cloud",
   "deepseek-v3.1:671b-cloud",
-  "qwen3.5:9b",
-  // "gpt-oss:120b-cloud",
+  // "qwen3.5:9b",
+  "gpt-oss:120b-cloud",
   "llama3.2-vision:11b",
   "llama3.1:8b",
   "mistral:7b",
 ];
+
+function normalizePlatform(value: unknown): GenerationPlatform {
+  return value === "mobile" ? "mobile" : "web";
+}
+
+function coerceSpec(
+  raw: Partial<WebAppSpec>,
+  platform: GenerationPlatform,
+): WebAppSpec {
+  const screens =
+    Array.isArray(raw.screens) && raw.screens.length > 0
+      ? raw.screens.filter(
+          (item): item is string => typeof item === "string" && !!item.trim(),
+        )
+      : [platform === "mobile" ? "Mobile Screen" : "Landing Page"];
+
+  return {
+    screens,
+    navPattern:
+      raw.navPattern === "top-nav" ||
+      raw.navPattern === "sidebar" ||
+      raw.navPattern === "hybrid" ||
+      raw.navPattern === "none"
+        ? raw.navPattern
+        : "none",
+    platform,
+    colorMode:
+      raw.colorMode === "dark" || raw.colorMode === "light"
+        ? raw.colorMode
+        : "light",
+    primaryColor: raw.primaryColor ?? "#2563eb",
+    accentColor: raw.accentColor ?? "#f59e0b",
+    stylingLib:
+      raw.stylingLib === "css" ||
+      raw.stylingLib === "tailwind" ||
+      raw.stylingLib === "shadcn"
+        ? raw.stylingLib
+        : "shadcn",
+    layoutDensity:
+      raw.layoutDensity === "compact" || raw.layoutDensity === "comfortable"
+        ? raw.layoutDensity
+        : "comfortable",
+    components: Array.isArray(raw.components)
+      ? raw.components.filter(
+          (item): item is string => typeof item === "string" && !!item.trim(),
+        )
+      : [],
+  };
+}
 
 function parseJsonStrict<T>(raw: string): T {
   try {
@@ -66,16 +122,18 @@ export async function POST(req: NextRequest) {
   try {
     const {
       prompt,
-      // Platform is intentionally fixed to web for current generation pipeline.
-      // stylingLib,
+      platform: rawPlatform,
+      model, // optional preferred model for stage 3
       // model = "mistral:7b", // 82s, 41s
       // model = "qwen3.5:9b", // 47s
       // model = "llama3.2-vision:11b", // 33s, 46s
       // model = "llama3.1:8b", // 1.3m, 10.7s, 35.3s
-      model = "deepseek-v3.1:671b-cloud", // 20.7s, 13.7
+      // model = "deepseek-v3.1:671b-cloud", // 20.7s, 13.7
       // model = "minimax-m2.7:cloud", // feels slow generation of code_chunk
+      // model = "gpt-oss:120b-cloud",
     } = await req.json();
-    const platform = "web";
+    const platform = normalizePlatform(rawPlatform);
+    const enhancedPrompt = buildEnhancedPrompt({ prompt, platform });
     const stage3ModelPriority = [
       model,
       ...STAGE3_MODELS.filter((m) => m !== model),
@@ -101,9 +159,10 @@ export async function POST(req: NextRequest) {
             ollama,
             STAGE1_MODELS,
             STAGE1_SYSTEM,
-            `User prompt: ${prompt}\nPlatform: ${platform}`,
+            `User prompt: ${enhancedPrompt}\nPlatform: ${platform}`,
           );
-        const spec = parseJsonStrict<WebAppSpec>(rawSpec);
+        const rawParsedSpec = parseJsonStrict<Partial<WebAppSpec>>(rawSpec);
+        const spec = coerceSpec(rawParsedSpec, platform);
         logger.info(`Stage 1 complete via model: ${stage1Model}`);
         await write({ type: "spec", spec });
 
@@ -145,7 +204,7 @@ export async function POST(req: NextRequest) {
               const result = streamText({
                 model: ollama(candidateModel),
                 system: STAGE3_SYSTEM,
-                prompt: buildScreenPrompt(spec, tree, screen),
+                prompt: buildScreenPrompt(spec, tree, screen, enhancedPrompt),
                 temperature: 0.2,
               });
 

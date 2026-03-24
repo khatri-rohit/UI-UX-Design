@@ -1,7 +1,9 @@
+export type GenerationPlatform = "web" | "mobile";
+
 export interface WebAppSpec {
   screens: string[];
   navPattern: "top-nav" | "sidebar" | "hybrid" | "none";
-  platform: "web";
+  platform: GenerationPlatform;
   colorMode: "dark" | "light";
   primaryColor: string;
   accentColor: string;

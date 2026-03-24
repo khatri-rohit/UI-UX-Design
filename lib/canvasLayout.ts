@@ -1,4 +1,5 @@
 import { Editor } from "tldraw";
+import { GenerationPlatform } from "./types";
 
 const H_GAP = 100; // gap between screens in same generation
 const V_GAP = 120; // gap between generations (vertical breathing room)
@@ -29,7 +30,24 @@ export function getInitialDimensions(screenType: string): {
   w: number;
   h: number;
 } {
+  return getInitialDimensionsForPlatform(screenType, "web");
+}
+
+export function getInitialDimensionsForPlatform(
+  screenType: string,
+  platform: GenerationPlatform,
+): {
+  w: number;
+  h: number;
+} {
   const type = screenType.toLowerCase();
+
+  if (platform === "mobile") {
+    if (type.includes("tablet")) return { w: 768, h: 1024 };
+    if (type.includes("modal") || type.includes("dialog"))
+      return { w: 360, h: 640 };
+    return { w: 390, h: 844 };
+  }
 
   if (
     type.includes("landing") ||
@@ -41,14 +59,11 @@ export function getInitialDimensions(screenType: string): {
   if (type.includes("dashboard") || type.includes("admin"))
     return { w: 1280, h: 900 }; // wide dashboard
 
-  if (type.includes("mobile") || type.includes("screen"))
-    return { w: 390, h: 844 }; // iPhone 14 dimensions
-
   if (type.includes("tablet")) return { w: 768, h: 1024 };
 
   if (type.includes("modal") || type.includes("dialog"))
     return { w: 480, h: 400 };
 
-  // Default — medium web page
-  return { w: 900, h: 700 };
+  // Default — medium web page with stable desktop baseline width
+  return { w: 960, h: 700 };
 }

@@ -1,11 +1,14 @@
 import { Button } from '@/components/ui/button'
-import { Sparkles } from 'lucide-react'
+import { Monitor, Smartphone, Sparkles } from 'lucide-react'
 import { useEffect, useRef } from 'react'
+import { GenerationPlatform } from '@/lib/types'
 
 type RightPanelProps = {
     prompt: string
     isGenerating: boolean
+    selectedPlatform: GenerationPlatform
     onPromptChange: (value: string) => void
+    onPlatformChange: (value: GenerationPlatform) => void
     onGenerate: () => void
     conversation: Array<{ role: string; content: string }>
     setConversation: React.Dispatch<React.SetStateAction<Array<{ role: string; content: string }>>>
@@ -14,7 +17,9 @@ type RightPanelProps = {
 const RightPanel = ({
     prompt,
     isGenerating,
+    selectedPlatform,
     onPromptChange,
+    onPlatformChange,
     onGenerate,
     conversation,
     setConversation,
@@ -60,8 +65,8 @@ const RightPanel = ({
                     ))}
                 </div>
                 <div className='my-6 h-px w-full bg-zinc-700/50' />
-                <div ref={conversationViewportRef} 
-                className='flex-1 space-y-3 overflow-y-auto rounded-2xl p-3 scrolling'>
+                <div ref={conversationViewportRef}
+                    className='flex-1 space-y-3 overflow-y-auto rounded-2xl p-3 scrolling'>
                     {conversation.length === 0 && (
                         <div className='py-8 text-center text-sm text-zinc-500'>
                             No conversation yet. Start by entering a prompt and generating a layout.
@@ -94,7 +99,7 @@ const RightPanel = ({
                         onClick={() => {
                             setConversation(prev => [
                                 ...prev,
-                                { role: 'user', content: prompt },
+                                { role: 'user', content: `${prompt}\n\nTarget platform: ${selectedPlatform}` },
                                 { role: 'assistant', content: '' },
                             ])
                             onGenerate()
@@ -105,6 +110,32 @@ const RightPanel = ({
                         <Sparkles className={`size-4 ${isGenerating ? 'animate-spin' : ''}`} />
                         {isGenerating ? 'Generating Layout...' : 'Generate Interface'}
                     </Button>
+
+                    <div className='rounded-2xl border border-zinc-800 bg-zinc-900/80 px-3 py-3'>
+                        <div className='mb-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-400'>Target Platform</div>
+                        <div className='grid grid-cols-2 gap-2'>
+                            <Button
+                                type='button'
+                                size='sm'
+                                variant={selectedPlatform === 'web' ? 'default' : 'outline'}
+                                onClick={() => onPlatformChange('web')}
+                                className='h-9'
+                            >
+                                <Monitor className='size-4' />
+                                Web
+                            </Button>
+                            <Button
+                                type='button'
+                                size='sm'
+                                variant={selectedPlatform === 'mobile' ? 'default' : 'outline'}
+                                onClick={() => onPlatformChange('mobile')}
+                                className='h-9'
+                            >
+                                <Smartphone className='size-4' />
+                                Mobile
+                            </Button>
+                        </div>
+                    </div>
                 </div>
 
                 <div className='pt-4 text-[11px] leading-relaxed text-zinc-500'>
