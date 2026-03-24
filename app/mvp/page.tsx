@@ -178,7 +178,7 @@ const StudioPage = () => {
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ prompt, platform: selectedPlatform }),
+                body: JSON.stringify({ model, prompt, platform: selectedPlatform }),
             })
 
             if (!response.ok || !response.body) {
