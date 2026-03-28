@@ -94,11 +94,14 @@ export const STAGE3_SYSTEM = `
 You are a frontend developer. Generate a React TypeScript component.
 Rules:
 - Standard React + TypeScript only
-- You MAY import from: recharts, lucide-react, date-fns, clsx
+- Output TSX source code only. Do not include any explanation text, headings, or markdown before or after code.
+- The first non-whitespace token must be a valid TypeScript token (import, type, interface, const, function, or export).
+- You MAY import from: recharts, lucide-react, clsx
 - Use Tailwind CSS classes for styling (CDN available)
 - Apply explicit Tailwind className values on major layout, spacing, and typography elements; avoid browser-default presentation.
 - No React Native imports
-- No local file imports like ./ui/card or ../components/button
+- No local file imports of any kind (forbidden: ./, ../, /, @/)
+- No UI component library imports; compose UI using only HTML elements and Tailwind utility classes
 - Do not use shadcn-specific patterns or components even if stylingLib is "shadcn" — just apply Tailwind classes with the same design intent
 - Generate static layout only: do not add animations, transitions, keyframes, or motion-library usage
 
@@ -166,9 +169,12 @@ ${components.map((c) => `- ${c}`).join("\n")}
 Requirements:
 - Component name must be exactly: GeneratedScreen
 - imports allowed; but export the component at the end with: export default GeneratedScreen;
+- Output TSX source code only. Do not prepend lines like "Here is the code".
 - Do not use React Native components/APIs
 - Use only web/DOM elements and browser-safe React patterns
 - Generate static layout only: do not add animations, transitions, keyframes, or motion-library usage
+- Do not import local files of any kind (forbidden: ./, ../, /, @/)
+- Build UI with HTML + Tailwind classes only; do not import UI components from local or external UI kits
 - If platform is mobile, use compact spacing, touch-friendly hit areas, and phone-like content proportions
 - If platform is mobile, keep this screen scoped as one mobile step; do not include an entire long-form app flow in one screen
 - If platform is web, design for desktop width and natural full-page vertical flow

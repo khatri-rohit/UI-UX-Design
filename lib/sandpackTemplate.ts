@@ -1,4 +1,5 @@
 import { extractDependencies } from "./dependencyExtractor";
+import { sanitizeGeneratedCode } from "./generatedCodeSanitizer";
 
 export const SANDBOX_HTML = `<!DOCTYPE html>
 <html>
@@ -94,10 +95,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 export function buildSandpackFiles(
   code: string,
 ): Record<string, { code: string }> {
-  const cleaned = code
-    .replace(/^```(?:tsx?|typescript|jsx?)?\n?/gm, "")
-    .replace(/^```$/gm, "")
-    .trim();
+  const cleaned = sanitizeGeneratedCode(code);
 
   // Ensure React is imported — inject if missing
   const { dependencies } = extractDependencies(cleaned);

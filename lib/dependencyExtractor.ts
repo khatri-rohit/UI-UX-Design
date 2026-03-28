@@ -60,8 +60,14 @@ export function extractDependencies(code: string): ExtractedDeps {
   while ((match = importRegex.exec(code)) !== null) {
     const importPath = match[1];
 
-    // Skip relative imports — those are local files
-    if (importPath.startsWith(".") || importPath.startsWith("/")) continue;
+    // Skip local imports — those are not npm dependencies
+    if (
+      importPath.startsWith(".") ||
+      importPath.startsWith("/") ||
+      importPath.startsWith("@/")
+    ) {
+      continue;
+    }
 
     // Extract package name — handle scoped packages (@scope/pkg) and sub-paths (pkg/sub)
     const packageName = importPath.startsWith("@")
