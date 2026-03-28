@@ -66,6 +66,8 @@ const FALLBACK_UX_PRIORITIES = [
   "Use one primary CTA per screen with clear semantic hierarchy.",
 ];
 
+const SHORT_DESIGN_TOKENS = new Set(["ui", "ux", "ai", "3d", "ar", "vr"]);
+
 function parseCsv(content: string): CsvRow[] {
   const lines = content
     .split(/\r?\n/)
@@ -128,7 +130,7 @@ function tokenize(text: string): string[] {
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, " ")
     .split(/\s+/)
-    .filter((token) => token.length > 2);
+    .filter((token) => token.length > 2 || SHORT_DESIGN_TOKENS.has(token));
 }
 
 function computeScore(inputTokens: string[], haystack: string): number {
@@ -218,56 +220,84 @@ async function loadSkillsIndex(): Promise<SkillsIndex> {
     "SKILL.md",
   );
 
-  const [stylesCsv, colorsCsv, layoutsCsv, typographyCsv, uxSkill] =
-    await Promise.all([
-      fs.readFile(stylesPath, "utf8"),
-      fs.readFile(colorsPath, "utf8"),
-      fs.readFile(layoutsPath, "utf8"),
-      fs.readFile(typographyPath, "utf8"),
-      fs.readFile(uxSkillPath, "utf8"),
-    ]);
+  const [
+    stylesResult,
+    colorsResult,
+    layoutsResult,
+    typographyResult,
+    uxSkillResult,
+  ] = await Promise.allSettled([
+    fs.readFile(stylesPath, "utf8"),
+    fs.readFile(colorsPath, "utf8"),
+    fs.readFile(layoutsPath, "utf8"),
+    fs.readFile(typographyPath, "utf8"),
+    fs.readFile(uxSkillPath, "utf8"),
+  ]);
+
+  const stylesCsv =
+    stylesResult.status === "fulfilled" ? stylesResult.value : "";
+  const colorsCsv =
+    colorsResult.status === "fulfilled" ? colorsResult.value : "";
+  const layoutsCsv =
+    layoutsResult.status === "fulfilled" ? layoutsResult.value : "";
+  const typographyCsv =
+    typographyResult.status === "fulfilled" ? typographyResult.value : "";
+  const uxSkill =
+    uxSkillResult.status === "fulfilled" ? uxSkillResult.value : "";
 
   const styleRows = parseCsv(stylesCsv);
   const colorRows = parseCsv(colorsCsv);
   const layoutRows = parseCsv(layoutsCsv);
   const typographyRows = parseCsv(typographyCsv);
 
-  const palettes: DesignPalette[] = colorRows.map((row) => ({
-    name: row["Palette Name"] || "",
-    primaryHex: row["Primary Hex"] || "",
-    secondaryHex: row["Secondary Hex"] || "",
-    accentHex: row["Accent Hex"] || "",
-    backgroundHex: row["Background Hex"] || "",
-    textHex: row["Text Hex"] || "",
-    psychology: row["Psychology"] || "",
-  }));
+  const palettes: DesignPalette[] =
+    colorRows.length > 0
+      ? colorRows.map((row) => ({
+          name: row["Palette Name"] || "",
+          primaryHex: row["Primary Hex"] || "",
+          secondaryHex: row["Secondary Hex"] || "",
+          accentHex: row["Accent Hex"] || "",
+          backgroundHex: row["Background Hex"] || "",
+          textHex: row["Text Hex"] || "",
+          psychology: row["Psychology"] || "",
+        }))
+      : [{ ...FALLBACK_PALETTE }];
 
-  const styles: DesignStyle[] = styleRows.map((row) => ({
-    name: row["Style Name"] || "",
-    category: row["Category"] || "",
-    keywords: row["Keywords"] || "",
-    typography: row["Typography"] || "",
-    effects: row["Effects"] || "",
-    bestFor: row["Best For"] || "",
-    avoidFor: row["Avoid For"] || "",
-    complexity: row["Complexity"] || "",
-  }));
+  const styles: DesignStyle[] =
+    styleRows.length > 0
+      ? styleRows.map((row) => ({
+          name: row["Style Name"] || "",
+          category: row["Category"] || "",
+          keywords: row["Keywords"] || "",
+          typography: row["Typography"] || "",
+          effects: row["Effects"] || "",
+          bestFor: row["Best For"] || "",
+          avoidFor: row["Avoid For"] || "",
+          complexity: row["Complexity"] || "",
+        }))
+      : [{ ...FALLBACK_STYLE }];
 
-  const layouts: LayoutHint[] = layoutRows.map((row) => ({
-    name: row["layout_name"] || "",
-    useCase: row["use_case"] || "",
-    cssStructure: row["css_structure"] || "",
-    visualTreatment: row["visual_treatment"] || "",
-  }));
+  const layouts: LayoutHint[] =
+    layoutRows.length > 0
+      ? layoutRows.map((row) => ({
+          name: row["layout_name"] || "",
+          useCase: row["use_case"] || "",
+          cssStructure: row["css_structure"] || "",
+          visualTreatment: row["visual_treatment"] || "",
+        }))
+      : [{ ...FALLBACK_LAYOUT }];
 
-  const typography: TypographyHint[] = typographyRows.map((row) => ({
-    contentType: row["content_type"] || "",
-    primarySize: row["primary_size"] || "",
-    secondarySize: row["secondary_size"] || "",
-    accentSize: row["accent_size"] || "",
-    weightContrast: row["weight_contrast"] || "",
-    lineHeight: row["line_height"] || "",
-  }));
+  const typography: TypographyHint[] =
+    typographyRows.length > 0
+      ? typographyRows.map((row) => ({
+          contentType: row["content_type"] || "",
+          primarySize: row["primary_size"] || "",
+          secondarySize: row["secondary_size"] || "",
+          accentSize: row["accent_size"] || "",
+          weightContrast: row["weight_contrast"] || "",
+          lineHeight: row["line_height"] || "",
+        }))
+      : [{ ...FALLBACK_TYPOGRAPHY }];
 
   const uxMatches = [...uxSkill.matchAll(/- `([^`]+)` - ([^\n]+)/g)]
     .slice(0, 10)
