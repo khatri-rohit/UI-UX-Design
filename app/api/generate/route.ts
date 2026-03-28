@@ -122,7 +122,7 @@ export async function POST(req: NextRequest) {
   try {
     const {
       prompt,
-      platform: rawPlatform,
+      platform,
       model, // optional preferred model for stage 3
       // model = "mistral:7b", // 82s, 41s
       // model = "qwen3.5:9b", // 47s
@@ -132,7 +132,6 @@ export async function POST(req: NextRequest) {
       // model = "minimax-m2.7:cloud", // feels slow generation of code_chunk
       // model = "gpt-oss:120b-cloud",
     } = await req.json();
-    const platform = normalizePlatform(rawPlatform);
     const enhancedPrompt = buildEnhancedPrompt({ prompt, platform });
     const stage3ModelPriority = [
       model,

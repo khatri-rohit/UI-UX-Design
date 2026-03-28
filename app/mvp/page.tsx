@@ -336,19 +336,18 @@ const StudioPage = () => {
     if (event.type === "screen_done") {
       const id = frameIdsRef.current.get(event.screen);
       if (!id) return;
-      const compiledCode = screenBuffersRef.current.get(event.screen) ?? "";
-      // console.log(compiledCode)
-      // Mark as compiling while worker runs
+
+      // Pass the full code and flip to done
+      // The shape's useEffect watches these props and mounts Sandpack
       editor.updateShape({
         id,
         type: "phone-frame",
         props: {
-          state: "compiling",
+          state: "done",
+          content: screenBuffersRef.current.get(event.screen),
         },
       });
 
-      // Send code to worker — result comes back via onResult callback above
-      compile(event.screen, compiledCode);
       screenBuffersRef.current.delete(event.screen);
     }
 

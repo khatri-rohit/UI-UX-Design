@@ -1,5 +1,4 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// components/shapes/PhoneFrameShapeUtil.tsx
 import { useEffect, useRef } from "react";
 import {
   HTMLContainer,
@@ -13,6 +12,12 @@ import {
   useEditor,
 } from "tldraw";
 import { GenerationPlatform } from "@/lib/types";
+import {
+  loadSandpackClient,
+  SandpackClient,
+  SandpackTemplate,
+} from "@codesandbox/sandpack-client";
+import { buildSandpackFiles } from "@/lib/sandpackTemplate";
 
 const SHAPE_TYPE = "phone-frame";
 
@@ -30,7 +35,7 @@ declare module "tldraw" {
   }
 }
 
-type PhoneFrameShape = TLShape<typeof SHAPE_TYPE>;
+type PhoneFrameShape = TLShape<typeof SHAPE_TYPE> & any; // to allow extra props for now and remove error, can be removed later when we have a better shape schema solution
 
 export class PhoneFrameShapeUtil extends ShapeUtil<PhoneFrameShape> {
   static override type = SHAPE_TYPE;
@@ -78,52 +83,89 @@ export class PhoneFrameShapeUtil extends ShapeUtil<PhoneFrameShape> {
 }
 
 function PhoneFrameShapeComponent({ shape }: { shape: PhoneFrameShape }) {
-  const { state, srcdoc, screenName, platform, w, h } = shape.props;
-  const isMobile = platform === "mobile";
+  const { state, content, screenName, w, h } = shape.props;
   const editor = useEditor();
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const clientRef = useRef<SandpackClient | null>(null);
+  const mountedRef = useRef(false);
 
+  // Passive dimension listener — shape-scoped, no Sandpack coupling
   useEffect(() => {
-    if (state !== "done" || isMobile) return;
+    function onMessage(e: MessageEvent) {
+      if (e.data?.type !== "frame-dimensions") return;
 
-    function handleMessage(e: MessageEvent) {
-      const iframeWindow = iframeRef.current?.contentWindow;
-      if (!iframeWindow || e.source !== iframeWindow) return;
-      if (e.data?.type !== "iframe-resize") return;
+      // Identify which iframe sent this by checking source
+      if (e.source !== iframeRef.current?.contentWindow) return;
 
-      const rawWidth = Number(e.data?.width);
-      const rawHeight = Number(e.data?.height);
-      if (!Number.isFinite(rawWidth) || !Number.isFinite(rawHeight)) return;
+      const newW = Math.min(Math.max(e.data.width, 200), 1920);
+      const newH = Math.min(Math.max(e.data.height, 100), 8000);
 
-      const newW = Math.min(Math.max(rawWidth, 620), 1920);
-      const newH = Math.min(Math.max(rawHeight, 420), 7000);
-
-      if (Math.abs(newW - w) < 4 && Math.abs(newH - h) < 4) return;
+      const wDiff = Math.abs(newW - w);
+      const hDiff = Math.abs(newH - h);
+      if (wDiff < 4 && hDiff < 4) return;
 
       editor.updateShape({
         id: shape.id,
         type: "phone-frame",
-        props: { w: newW, h: newH },
+        props: {
+          ...(wDiff >= 4 && { w: newW }),
+          ...(hDiff >= 4 && { h: newH }),
+        },
       });
     }
 
-    window.addEventListener("message", handleMessage);
-    return () => window.removeEventListener("message", handleMessage);
-  }, [isMobile, state, w, h, editor, shape.id]);
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [w, h, shape.id, editor]);
 
-  const frameStyle = isMobile
-    ? {
-        borderRadius: 16,
-        border: "1px solid rgba(191, 200, 217, 0.65)",
-        background: "#f8fafc",
-        boxShadow: "0 14px 28px rgba(2, 8, 20, 0.22)",
-      }
-    : {
-        borderRadius: 10,
-        border: "1px solid rgba(189, 199, 216, 0.58)",
-        background: "#f8fafc",
-        boxShadow: "0 18px 34px rgba(2, 8, 20, 0.22)",
-      };
+  useEffect(() => {
+    if (state !== "done" || !content || !iframeRef.current) return;
+    console.log(content);
+    console.log(screenName);
+    console.log(mountedRef.current);
+
+    if (mountedRef.current) return;
+
+    mountedRef.current = true;
+
+    // console.log(clientRef.current);
+    // if (!clientRef.current) return;
+
+    (async () => {
+      console.log(iframeRef.current);
+
+      clientRef.current?.destroy();
+      const client = await loadSandpackClient(
+        iframeRef.current!,
+        {
+          files: buildSandpackFiles(content),
+          entry: "/index.tsx",
+          template: "create-react-app-typescript",
+        },
+        {
+          showOpenInCodeSandbox: false,
+          showErrorScreen: true,
+          showLoadingScreen: true,
+          // Sandpack's own bundler — no manual compilation
+        },
+      );
+      console.log(client);
+
+      clientRef.current = client;
+      // No client.listen() — dimensions come through window message automatically
+    })();
+
+    return () => {
+      mountedRef.current = false;
+    };
+  }, [state, content]);
+
+  useEffect(
+    () => () => {
+      clientRef.current?.destroy();
+    },
+    [],
+  );
 
   const statusBg =
     state === "done" ? "#dcfce7" : state === "error" ? "#fee2e2" : "#e2e8f0";
@@ -133,7 +175,10 @@ function PhoneFrameShapeComponent({ shape }: { shape: PhoneFrameShape }) {
   return (
     <HTMLContainer
       style={{
-        ...frameStyle,
+        borderRadius: 10,
+        border: "1px solid rgba(189, 199, 216, 0.58)",
+        // background: "#f8fafc",
+        boxShadow: "0 18px 34px rgba(2, 8, 20, 0.22)",
         overflow: "hidden",
         display: "flex",
         flexDirection: "column",
@@ -143,7 +188,7 @@ function PhoneFrameShapeComponent({ shape }: { shape: PhoneFrameShape }) {
       <div
         style={{
           height: 28,
-          background: "#eef2f8",
+          // background: "#eef2f8",
           borderBottom: "1px solid rgba(186, 196, 213, 0.55)",
           flexShrink: 0,
           display: "flex",
@@ -175,7 +220,6 @@ function PhoneFrameShapeComponent({ shape }: { shape: PhoneFrameShape }) {
               whiteSpace: "nowrap",
               overflow: "hidden",
               textOverflow: "ellipsis",
-              maxWidth: isMobile ? 130 : 280,
             }}
           >
             {screenName || "Untitled Screen"}
@@ -204,7 +248,7 @@ function PhoneFrameShapeComponent({ shape }: { shape: PhoneFrameShape }) {
           flex: 1,
           overflow: "hidden",
           position: "relative",
-          background: "#fff",
+          // background: "#fff",
         }}
       >
         {state === "skeleton" && <SkeletonScreen />}
@@ -227,18 +271,16 @@ function PhoneFrameShapeComponent({ shape }: { shape: PhoneFrameShape }) {
           </div>
         )}
 
-        {state === "done" && srcdoc && (
+        {state === "done" && (
           <iframe
             ref={iframeRef}
-            srcDoc={srcdoc}
-            sandbox="allow-scripts"
             style={{
               width: "100%",
               height: "100%",
               border: "none",
-              display: "block",
-              background: "#fff",
+              display: state === "done" ? "block" : "none",
             }}
+            allow="cross-origin-isolated"
           />
         )}
 
@@ -271,6 +313,8 @@ function SkeletonScreen() {
         flexDirection: "column",
         gap: 10,
         background: "#fff",
+        width: "100%",
+        height: "100%",
       }}
     >
       {[96, 82, 100, 74, 88].map((w, i) => (
@@ -298,6 +342,8 @@ function StreamingScreen() {
         flexDirection: "column",
         gap: 7,
         background: "#fff",
+        width: "100%",
+        height: "100%",
       }}
     >
       <div

@@ -34,8 +34,7 @@ Compilation guardrails (must pass):
 - Close every JSX tag and every string/template literal.
 - Avoid unsupported syntax and avoid trailing partial lines.
 - Use inline mock data inside the file if needed.
-- Do not import or export anything.
-- Before finishing, self-check syntax and then append: // === END ===
+- imports allowed; but export the component at the end with: export default GeneratedScreen;
 `.trim();
 
 export const STAGE1_SYSTEM = `
@@ -74,19 +73,13 @@ Space screens 240px apart horizontally starting at x=60, y=80.
 `.trim();
 
 export const STAGE3_SYSTEM = `
-You are a React web developer. Generate a single TSX screen component.
-Rules (follow exactly):
-- Web only. Use HTML elements (div, header, nav, main, section, button, input, img, table, etc.)
-- Do NOT use React Native or Expo APIs/components (View, Text, ScrollView, TouchableOpacity, FlatList, SafeAreaView)
-- Do NOT import from any package
-- Do NOT export anything
-- TypeScript + TSX only
-- Use inline styles or simple className strings that do not rely on external CSS frameworks
-- Do not include external script tags (especially cdn.tailwindcss.com)
-- Do not put CSS at-rules like @media inside React style objects; use responsive layout logic or plain CSS blocks instead
-- Keep output self-contained in one file and include small inline mock data where useful
-- Return code only. No markdown fences. No explanations.
-- End your response with exactly: // === END ===
+You are a frontend developer. Generate a React TypeScript component.
+Rules:
+- Standard React + TypeScript only
+- You MAY import from: recharts, motion, lucide-react, date-fns, clsx
+- Use Tailwind CSS classes for styling (CDN available)
+- No React Native imports
+- No local file imports
 
 ${CREATIVITY_DIRECTIVE}
 ${INTENT_LOCK_DIRECTIVE}
@@ -150,13 +143,12 @@ ${components.map((c) => `- ${c}`).join("\n")}
 
 Requirements:
 - Component name must be exactly: GeneratedScreen
-- No imports and no exports
+- imports allowed; but export the component at the end with: export default GeneratedScreen;
 - Do not use React Native components/APIs
 - Use only web/DOM elements and browser-safe React patterns
 - If platform is mobile, use compact spacing, touch-friendly hit areas, and phone-like content proportions
 - If platform is web, design for desktop width and natural full-page vertical flow
 - Return code only (no markdown)
-- End with exactly: // === END ===
 
 Creative direction from design skill system:
 - Match the screen intent with a deliberate style direction.
@@ -174,6 +166,5 @@ Syntax safety checklist:
 - Ensure all JSX tags are closed.
 - Ensure all delimiters are balanced: (), {}, [].
 - Ensure all quotes and template literals are closed.
-- Ensure the final line is exactly: // === END ===
 `.trim();
 }
