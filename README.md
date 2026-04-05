@@ -55,6 +55,38 @@ The platform is currently in its Phase 1 MVP status, focusing on the core genera
    ```
    The application will be accessible at `http://localhost:3000/`. You can proceed to `http://localhost:3000/studio` (or the root page) to access the canvas.
 
+## Prisma + Supabase (Prisma ORM v7)
+
+This project is configured for Prisma ORM v7 with Supabase Postgres and separates runtime database access from Prisma CLI migrations.
+
+- Runtime Prisma Client uses `DATABASE_URL` (pooled connection).
+- Prisma CLI and migrations use `DIRECT_URL` (direct connection) via `prisma.config.ts`.
+
+### Environment Variables
+
+Copy `.env.example` values into your local `.env` and replace `[YOUR-PASSWORD]`:
+
+```env
+# Runtime Prisma Client usage (Supabase pooled connection)
+DATABASE_URL="postgresql://postgres.grlntfzdslmklimerevx:[YOUR-PASSWORD]@aws-1-ap-southeast-1.pooler.supabase.com:6543/postgres?pgbouncer=true"
+
+# Prisma CLI and migrations (direct connection)
+DIRECT_URL="postgresql://postgres.grlntfzdslmklimerevx:[YOUR-PASSWORD]@aws-1-ap-southeast-1.pooler.supabase.com:5432/postgres"
+```
+
+### Prisma Commands
+
+```bash
+npm run prisma:validate
+npm run prisma:generate
+npm run prisma:migrate:dev
+npm run prisma:studio
+```
+
+### App Router Health Check Route
+
+Use the App Router API route at `/api/db/health` to verify Prisma can query Supabase safely.
+
 ## Enterprise Roadmap
 
 ### Phase 2: Interactivity & Node-Level Editing

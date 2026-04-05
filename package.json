@@ -3,15 +3,24 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "predev": "prisma generate",
     "dev": "next dev",
+    "prebuild": "prisma generate",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "prisma:generate": "prisma generate",
+    "prisma:validate": "prisma validate",
+    "prisma:migrate:dev": "prisma migrate dev",
+    "prisma:migrate:deploy": "prisma migrate deploy",
+    "prisma:studio": "prisma studio"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.0.8",
     "@codesandbox/sandpack-client": "^2.19.8",
     "@gsap/react": "^2.1.2",
+    "@prisma/adapter-pg": "^7.6.0",
+    "@prisma/client": "^7.6.0",
     "ai": "^6.0.134",
     "axios": "^1.13.6",
     "class-variance-authority": "^0.7.1",
@@ -41,6 +50,7 @@
     "dotenv": "^17.4.0",
     "eslint": "^9",
     "eslint-config-next": "16.2.0",
+    "prisma": "^7.6.0",
     "tailwindcss": "^4",
     "tsx": "^4.21.0",
     "typescript": "^5"
