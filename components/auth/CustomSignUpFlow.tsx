@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
@@ -7,13 +8,13 @@ import { useAuth, useSignUp } from "@clerk/nextjs";
 
 import { cn } from "@/lib/utils";
 
-type ClerkErrorPayload = {
-  global?: Array<{ message?: string }>;
-  fields?: Record<string, { message?: string } | Array<{ message?: string }>>;
-};
+// type ClerkErrorPayload = {
+//   global?: Array<{ message?: string }>;
+//   fields?: Record<string, { message?: string } | Array<{ message?: string }>>;
+// };
 
 function getFieldError(
-  errors: ClerkErrorPayload | undefined,
+  errors: any,
   fieldName: string,
 ) {
   const fieldError = errors?.fields?.[fieldName];
@@ -43,7 +44,7 @@ export default function CustomSignUpFlow() {
   const [statusMessage, setStatusMessage] = useState("");
 
   const isLoading = fetchStatus === "fetching";
-  const typedErrors = errors as ClerkErrorPayload | undefined;
+  const typedErrors = errors;
   const globalMessages = useMemo(
     () =>
       (typedErrors?.global ?? [])
