@@ -358,13 +358,11 @@ const Dashboard = () => {
         </div>
 
         <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Open account panel"
-          >
-            <UserButton />
-          </Button>
+          <UserButton>
+            <UserButton.MenuItems>
+              <UserButton.Action label="manageAccount" />
+            </UserButton.MenuItems>
+          </UserButton>
         </div>
       </header>
 

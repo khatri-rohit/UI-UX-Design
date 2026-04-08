@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
-import { ClerkProvider, } from '@clerk/nextjs'
+import { ClerkProvider } from "@clerk/nextjs";
 import { Geist, Geist_Mono, Inter } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
+import { ui } from "@clerk/ui";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 
@@ -18,7 +19,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "LOGIC",
-  description: "A UI/UX design genertor can help you create stunning designs with ease.",
+  description:
+    "A UI/UX design genertor can help you create stunning designs with ease.",
 };
 
 export default function RootLayout({
@@ -39,7 +41,7 @@ export default function RootLayout({
       )}
     >
       <body className="min-h-full flex flex-col">
-        <ClerkProvider>{children}</ClerkProvider>
+        <ClerkProvider ui={ui}>{children}</ClerkProvider>
       </body>
     </html>
   );
