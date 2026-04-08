@@ -13,6 +13,28 @@
   font-family: var(--font-logic-mono), monospace;
 }
 
+.heroTitle {
+  font-size: clamp(3rem, 8vw, 5rem);
+}
+
+@media (min-width: 1750px) {
+  .heroTitle {
+    font-size: clamp(3rem, 8vw, 6rem);
+  }
+}
+
+@media (min-width: 2000px) {
+  .heroTitle {
+    font-size: clamp(3rem, 8vw, 8rem);
+  }
+}
+
+@media (min-width: 2500px) {
+  .heroTitle {
+    font-size: clamp(3rem, 8vw, 9rem);
+  }
+}
+
 .gridBg {
   background-image:
     linear-gradient(var(--logic-surface-subtle) 1px, transparent 1px),

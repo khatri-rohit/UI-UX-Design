@@ -1,12 +1,14 @@
 "use client";
 
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { JetBrains_Mono } from "next/font/google";
 import { LandingFooter } from "@/components/landing/Footer";
 import { LandingHeader } from "@/components/landing/Header";
 import { LandingMotion } from "@/components/landing/LandingMotion";
 import { ReadyToDeploySection } from "@/components/landing/ReadyToDeploySection";
 import styles from "./page.module.css";
+import StarterInput from "./StarterInput";
 
 const terminalFont = JetBrains_Mono({
   subsets: ["latin"],
@@ -16,24 +18,36 @@ const terminalFont = JetBrains_Mono({
 const TYPING_TEXT = "Generate a sleek fintech mobile app...";
 
 const LandingPage = () => {
+  const router = useRouter();
+
+  const handleStarterSubmit = (value: string) => {
+    router.push(`/studio?prompt=${encodeURIComponent(value)}`);
+  };
+
   return (
     <div
       data-logic-root
-      className={`${styles.logicRoot} ${terminalFont.variable}`}
+      className={`${styles.logicRoot} ${terminalFont.variable} selection:text-white selection:bg-black`}
     >
       <LandingHeader />
 
-      <main className="space-y-0 pt-24">
-        <section className="hero-section flex min-h-screen items-center justify-center border-b border-(--logic-border)">
-          <div className="grid grid-cols-1 lg:grid-cols-12 mb-50">
-            <div className="hero-left border-r border-(--logic-border) bg-white p-12 lg:col-span-5">
+      <main className="space-y-0">
+        <section className="hero-section min-h-screen border-b border-(--logic-border) px-2 pb-8 pt-24 md:px-4 md:pb-12">
+          <div className="mx-auto grid w-full grid-cols-1 border border-(--logic-border) bg-(--logic-bg) 2xl:mt-20 xl:mt-10 lg:mt-2.5 md:min-h-[68vh] lg:h-[72vh] xl:h-[76vh] 2xl:h-[69vh] lg:grid-cols-12">
+            <div className="hero-left flex flex-col border-b border-(--logic-border) bg-white p-8 md:p-12 lg:col-span-5 lg:border-b-0 lg:border-r">
               <div className="hero-kicker mono mb-4 flex items-center gap-2 text-xs uppercase tracking-widest text-(--logic-muted)">
                 <span className="h-2 w-2 animate-pulse bg-black" />
                 SYSTEM_READY: v4.0.2
               </div>
 
-              <h1 className="hero-title mb-8 text-[clamp(3rem,8vw,5rem)] leading-[0.9] font-black tracking-tighter">
-                THE <span className="text-[#777777]">INTERFACE</span> ENGINE.
+              <h1
+                className={`hero-title ${styles.heroTitle} mb-8 leading-[0.9] font-black tracking-tighter`}
+              >
+                THE{" "}
+                <span className="text-[#777777] selection:text-gray-400!">
+                  INTERFACE
+                </span>{" "}
+                ENGINE.
               </h1>
 
               <p className="hero-description mb-12 max-w-md border-l-2 border-black pl-6 text-lg">
@@ -41,25 +55,23 @@ const LandingPage = () => {
                 layouts at the speed of thought with our neural CAD engine.
               </p>
 
-              <div className="hero-terminal relative overflow-hidden bg-black p-6 text-sm text-white">
-                <div className="mono mb-4 flex items-center gap-2 border-b border-zinc-800 pb-2 text-zinc-500">
-                  TERMINAL prompt_input
-                </div>
-                <div className="mono flex gap-2">
-                  <span className="text-[#5e5e5e]">&gt;</span>
-                  <span data-typing-target className="typing-text" />
-                  <span
-                    data-typing-cursor
-                    className="typing-cursor inline-block w-2 bg-white"
-                  />
+              <div className="mt-10 lg:mt-auto">
+                <div className="hero-terminal relative overflow-hidden bg-black p-6 text-sm text-white">
+                  <div className="mono mb-4 flex items-center gap-2 border-b border-zinc-800 pb-2 text-zinc-500">
+                    TERMINAL prompt_input
+                  </div>
+                  <div className="mono flex gap-2 w-full">
+                    <span className="text-[#5e5e5e] mt-1.5">&gt;</span>
+                    <StarterInput onSubmit={handleStarterSubmit} />
+                  </div>
                 </div>
               </div>
             </div>
 
             <div
-              className={`hero-grid-layer hero-canvas relative flex items-center justify-center overflow-hidden bg-white p-8 lg:col-span-7 ${styles.gridBg}`}
+              className={`hero-grid-layer hero-canvas relative flex min-h-104 items-center justify-center overflow-hidden bg-white p-6 md:p-8 lg:col-span-7 ${styles.gridBg}`}
             >
-              <div className="w-full max-w-2xl border border-black bg-(--logic-bg) shadow-[20px_20px_0px_0px_rgba(0,0,0,0.05)]">
+              <div className="w-full 2xl:max-w-5xl lg:max-w-2xl 2xl:h-100 xl:h-105 border border-black bg-(--logic-bg) shadow-[20px_20px_0px_0px_rgba(0,0,0,0.05)]">
                 <div className="flex h-8 items-center gap-2 border-b border-(--logic-border) bg-(--logic-surface-muted) px-4">
                   <div className="h-2 w-2 rounded-full bg-(--logic-border)" />
                   <div className="h-2 w-2 rounded-full bg-(--logic-border)" />
@@ -70,7 +82,7 @@ const LandingPage = () => {
                 </div>
 
                 <div className="grid grid-cols-3 gap-4 p-8">
-                  <div className="stagger-card flex h-24 flex-col justify-between border border-(--logic-border) bg-white p-4">
+                  <div className="stagger-card flex xl:h-40 h-24 flex-col justify-between border border-(--logic-border) bg-white p-4">
                     <div className="line-sweep h-1 w-1/2 bg-(--logic-border)" />
                     <div className="h-8 w-8 rounded-full border border-(--logic-border)" />
                   </div>

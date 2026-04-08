@@ -12,11 +12,11 @@ export function ReadyToDeploySection() {
         </p>
 
         <div className="mx-auto mt-12 w-full max-w-2xl space-y-4">
-          <div className="group border-2 border-black bg-black p-8 text-white transition-all duration-300 hover:bg-white hover:text-black">
+          <div className="border-2 border-black p-8 transition-all duration-300">
             <div className="text-3xl font-black uppercase tracking-tighter">
               Start Building for Free
             </div>
-            <div className="line-sweep mt-4 h-px bg-white/40 group-hover:bg-black/40" />
+            <div className="line-sweep mt-4 h-px bg-white/40" />
 
             <form
               action="/studio"
@@ -24,7 +24,7 @@ export function ReadyToDeploySection() {
               className="mt-6 flex flex-col gap-3 sm:flex-row"
             >
               <input
-                className="mono min-h-11 w-full border-0 border-b border-current bg-transparent text-base uppercase outline-none focus-visible:ring-2 focus-visible:ring-current focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+                className="mono min-h-11 w-full border-0 border-b border-current bg-transparent text-base uppercase outline-none"
                 placeholder="ENTER WORK EMAIL"
                 type="email"
                 name="email"

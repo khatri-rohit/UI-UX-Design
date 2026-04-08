@@ -1,7 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   createShapeId,
   TLComponents,
@@ -159,6 +160,7 @@ const components: TLComponents = {
 const shapeUtils = [PhoneFrameShapeUtil]; // defined OUTSIDE component — never recreate in render
 
 const StudioPage = () => {
+  const searchParams = useSearchParams();
   const editorRef = useRef<Editor | null>(null);
   const shapeIdRef = useRef<ReturnType<typeof createShapeId> | null>(null);
   const screenBuffersRef = useRef<Map<string, string>>(new Map());
@@ -175,6 +177,15 @@ const StudioPage = () => {
   const [selectedPlatform, setSelectedPlatform] =
     useState<GenerationPlatform>("web");
   const [model, setModel] = useState<string>("gemma4:31b-cloud");
+
+  useEffect(() => {
+    const promptFromQuery = searchParams.get("prompt")?.trim();
+    if (!promptFromQuery) {
+      return;
+    }
+
+    setPrompt(promptFromQuery);
+  }, [searchParams]);
 
   // const quickPrompts = [
   //   "UGC agency landing page with hero, social proof, pricing, and conversion-focused contact section",
