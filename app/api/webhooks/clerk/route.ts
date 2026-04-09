@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyWebhook } from "@clerk/nextjs/webhooks";
-import { UserJSON, WebhookEvent } from "@clerk/nextjs/server";
+import type { UserJSON, WebhookEvent } from "@clerk/nextjs/server";
 
 import logger from "@/lib/logger";
 import prisma from "@/lib/prisma";
+import { Prisma } from "@/app/generated/prisma/browser";
 
 export const runtime = "nodejs";
 
@@ -80,11 +81,10 @@ function inferProvider(
 
   const provider = String(externalAccounts[0].provider ?? "").toLowerCase();
 
-  if (provider.includes("google_account")) {
+  if (provider.includes("google") || provider.includes("oauth_google")) {
     return "GOOGLE";
   }
-
-  if (provider.includes("oauth_github")) {
+  if (provider.includes("github") || provider.includes("oauth_github")) {
     return "GITHUB";
   }
 
@@ -107,13 +107,15 @@ function mapSessionEventToStatus(eventType: string): SessionStatus | null {
   return null;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function upsertUserFromWebhookData(tx: any, userData: UserJSON) {
+async function upsertUserFromWebhookData(
+  tx: Prisma.TransactionClient,
+  userData: UserJSON,
+) {
   const clerkUserId = userData.id;
   if (!clerkUserId || typeof clerkUserId !== "string") {
     return null;
   }
-  console.log(userData);
+
   const email = extractPrimaryEmail(userData, clerkUserId);
   const name = extractDisplayName(userData, email);
   const provider = inferProvider(userData.external_accounts);
@@ -138,8 +140,10 @@ async function upsertUserFromWebhookData(tx: any, userData: UserJSON) {
   });
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function ensureUserForSession(tx: any, clerkUserId: string) {
+async function ensureUserForSession(
+  tx: Prisma.TransactionClient,
+  clerkUserId: string,
+) {
   const fallbackEmail = `${clerkUserId}@clerk.local`;
 
   return tx.user.upsert({
@@ -159,9 +163,7 @@ async function ensureUserForSession(tx: any, clerkUserId: string) {
 
 export async function POST(req: NextRequest) {
   try {
-    const signingSecret =
-      process.env.CLERK_WEBHOOK_SIGNING_SECRET ??
-      process.env.CLERK_WEBHOOK_SECRET;
+    const signingSecret = process.env.CLERK_WEBHOOK_SIGNING_SECRET;
 
     if (!signingSecret) {
       logger.error(
@@ -189,104 +191,106 @@ export async function POST(req: NextRequest) {
       eventType: evt.type,
     });
 
-    const transactionResult = await prisma.$transaction(async (tx) => {
-      const insertedWebhookEvent = await tx.clerkWebhookEvent.createMany({
-        data: [
-          {
-            id: webhookMessageId,
-            eventType: evt.type,
-          },
-        ],
-        skipDuplicates: true,
-      });
-
-      if (insertedWebhookEvent.count === 0) {
-        return { duplicate: true };
-      }
-
-      if (evt.type === "user.created" || evt.type === "user.updated") {
-        await upsertUserFromWebhookData(tx, evt.data);
-      }
-
-      if (evt.type === "user.deleted") {
-        const clerkUserId = evt.data?.id;
-        if (typeof clerkUserId === "string" && clerkUserId.length > 0) {
-          // Soft delete the user in our database to preserve historical data and relations, but mark them as inactive
-          await tx.user.updateMany({
-            where: {
-              clerkUserId,
+    const transactionResult = await prisma.$transaction(
+      async (tx: Prisma.TransactionClient) => {
+        const insertedWebhookEvent = await tx.clerkWebhookEvent.createMany({
+          data: [
+            {
+              id: webhookMessageId,
+              eventType: evt.type,
             },
-            data: {
-              isActive: false,
-            },
-          });
+          ],
+          skipDuplicates: true,
+        });
 
-          // Delete the user from clerk users management as well, since the user.deleted event can be triggered by external deletion from clerk dashboard or API
-          // const { users } = await clerkClient();
-          // await users.deleteUser(clerkUserId);
+        if (insertedWebhookEvent.count === 0) {
+          return { duplicate: true };
         }
-      }
 
-      if (
-        evt.type === "session.created" ||
-        evt.type === "session.ended" ||
-        evt.type === "session.revoked"
-      ) {
-        const sessionData = evt.data;
-        const clerkSessionId = sessionData?.id;
-        const clerkUserId = sessionData?.user_id;
-        const status = mapSessionEventToStatus(evt.type);
+        if (evt.type === "user.created" || evt.type === "user.updated") {
+          await upsertUserFromWebhookData(tx, evt.data);
+        }
+
+        if (evt.type === "user.deleted") {
+          const clerkUserId = evt.data?.id;
+          if (typeof clerkUserId === "string" && clerkUserId.length > 0) {
+            // Soft delete the user in our database to preserve historical data and relations, but mark them as inactive
+            await tx.user.updateMany({
+              where: {
+                clerkUserId,
+              },
+              data: {
+                isActive: false,
+              },
+            });
+
+            // Delete the user from clerk users management as well, since the user.deleted event can be triggered by external deletion from clerk dashboard or API
+            // const { users } = await clerkClient();
+            // await users.deleteUser(clerkUserId);
+          }
+        }
 
         if (
-          typeof clerkSessionId === "string" &&
-          clerkSessionId.length > 0 &&
-          typeof clerkUserId === "string" &&
-          clerkUserId.length > 0 &&
-          status
+          evt.type === "session.created" ||
+          evt.type === "session.ended" ||
+          evt.type === "session.revoked"
         ) {
-          const user = await ensureUserForSession(tx, clerkUserId);
-          const issuedAt =
-            timestampToDate(sessionData?.created_at) ?? new Date();
-          const expiresAt = timestampToDate(sessionData?.expire_at);
+          const sessionData = evt.data;
+          const clerkSessionId = sessionData?.id;
+          const clerkUserId = sessionData?.user_id;
+          const status = mapSessionEventToStatus(evt.type);
 
-          await tx.appSession.upsert({
-            where: {
-              clerkSessionId,
-            },
-            create: {
-              userId: user.id,
-              clerkSessionId,
-              status,
-              issuedAt,
-              expiresAt: expiresAt ?? undefined,
-              lastActiveAt: new Date(),
-            },
-            update: {
-              userId: user.id,
-              status,
-              expiresAt: expiresAt ?? undefined,
-              lastActiveAt: new Date(),
-            },
-          });
+          if (
+            typeof clerkSessionId === "string" &&
+            clerkSessionId.length > 0 &&
+            typeof clerkUserId === "string" &&
+            clerkUserId.length > 0 &&
+            status
+          ) {
+            const user = await ensureUserForSession(tx, clerkUserId);
+            const issuedAt =
+              timestampToDate(sessionData?.created_at) ?? new Date();
+            const expiresAt = timestampToDate(sessionData?.expire_at);
+
+            await tx.appSession.upsert({
+              where: {
+                clerkSessionId,
+              },
+              create: {
+                userId: user.id,
+                clerkSessionId,
+                status,
+                issuedAt,
+                expiresAt: expiresAt ?? undefined,
+                lastActiveAt: new Date(),
+              },
+              update: {
+                userId: user.id,
+                status,
+                expiresAt: expiresAt ?? undefined,
+                lastActiveAt: new Date(),
+              },
+            });
+
+            await tx.authAuditEvent.create({
+              data: {
+                userId: user.id,
+                clerkUserId,
+                clerkSessionId,
+                eventType: evt.type,
+                eventSource: "WEBHOOK",
+                metadata: {
+                  webhookEventId: webhookMessageId,
+                  webhookType: evt.type,
+                },
+              },
+            });
+          }
         }
 
-        const user = await ensureUserForSession(tx, clerkUserId);
-        await tx.authAuditEvent.create({
-          data: {
-            clerkUserId: user.id,
-            clerkSessionId: clerkSessionId ?? null,
-            eventType: evt.type,
-            eventSource: "WEBHOOK",
-            metadata: {
-              webhookEventId: webhookMessageId,
-              webhookType: evt.type,
-            },
-          },
-        });
-      }
-
-      return { duplicate: false };
-    });
+        return { duplicate: false };
+      },
+    );
 
     if (transactionResult.duplicate) {
       return NextResponse.json({ ok: true, duplicate: true });

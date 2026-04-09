@@ -77,13 +77,14 @@ model Projects {
     createdAt     DateTime @default(now())
     updatedAt     DateTime @updatedAt
 
-    user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-    generations generations[]
+    user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+    generations Generation[]
 
     @@index([userId, createdAt])
+    @@map("Projects")
 }
 
-model generations {
+model Generation {
     id        String   @id @default(cuid())
     projectId String
     model     String
@@ -96,6 +97,7 @@ model generations {
     project Projects @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
     @@index([projectId, createdAt])
+    @@map("generations")
 }
 
 enum Role {
