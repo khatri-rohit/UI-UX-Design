@@ -146,7 +146,7 @@ const SideBar = ({
   return (
     <>
       <motion.aside
-        className="logic-sidebar hidden w-64 shrink-0 border-r border-border bg-background md:flex"
+        className="logic-sidebar hidden w-64 pt-14 shrink-0 border-r border-border bg-background md:flex"
         {...fadeLeft(0.06)}
       >
         <div className="flex h-full flex-col py-6">
@@ -275,7 +275,7 @@ const SideBar = ({
               </Select> */}
             <button
               type="button"
-              className="mt-1 flex w-full items-center gap-3 px-4 py-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              className="flex w-full items-center gap-3 px-4 pl-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
               <HelpCircle className="size-4" />
               <span

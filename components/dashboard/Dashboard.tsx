@@ -53,13 +53,13 @@ const quickActions: Array<{
   prompt: string;
   platform: DashboardPlatform;
 }> = [
-  {
-    label: "Mobile friendly home...",
-    icon: Smartphone,
-    prompt:
-      "Design a mobile-first homepage with onboarding, social proof, and a clear CTA section.",
-    platform: "mobile",
-  },
+  // {
+  //   label: "Mobile friendly home...",
+  //   icon: Smartphone,
+  //   prompt:
+  //     "Design a mobile-first homepage with onboarding, social proof, and a clear CTA section.",
+  //   platform: "mobile",
+  // },
   {
     label: "Layered dashboard...",
     icon: Layers,
@@ -216,7 +216,7 @@ const Dashboard = () => {
         </div>
       </motion.header>
 
-      <div className="flex h-screen overflow-hidden pt-14 relative">
+      <div className="flex h-screen overflow-hidden relative">
         <SideBar
           setIsMobileMenuOpen={setIsMobileMenuOpen}
           isMobileMenuOpen={isMobileMenuOpen}
