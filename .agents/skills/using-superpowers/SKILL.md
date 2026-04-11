@@ -37,7 +37,7 @@ If `copilot-instructions.md` or `AGENTS.md` says "don't use TDD" and a skill say
 
 ## Platform Adaptation
 
-Superpowers skills may reference Claude-style tool names. In VS Code agents, use the mappings in `references/copilot-tools.md`, `references/codex-tools.md`, and `references/gemini-tools.md` (all adapted here for VS Code workflows).
+Superpowers skills may reference Claude-style tool names. In VS Code agents, use the mappings in `references/copilot-tools.md`(all adapted here for VS Code workflows).
 
 # Using Skills
 

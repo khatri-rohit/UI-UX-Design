@@ -31,6 +31,11 @@
       "sourceType": "github",
       "computedHash": "516bd2154eb843a8240e43d5b285229129853114ad7075a5e141e1c08e408c84"
     },
+    "next-best-practices": {
+      "source": "vercel-labs/next-skills",
+      "sourceType": "github",
+      "computedHash": "db85045827ebeb83ac8dbc992b69188755eeb74dcf01cbf5e694d58aa494a106"
+    },
     "shadcn": {
       "source": "shadcn/ui",
       "sourceType": "github",
@@ -46,6 +51,11 @@
       "sourceType": "github",
       "computedHash": "f54f39ce967af3a4bba1f662c3600f0253467508d5fbbc7c545c67e102da2253"
     },
+    "tanstack-start-best-practices": {
+      "source": "deckardger/tanstack-agent-skills",
+      "sourceType": "github",
+      "computedHash": "5f96b7af6d45343b5f272007ac16f149a319d3f203b6ed16bddc0f54f1257ac2"
+    },
     "using-superpowers": {
       "source": "obra/superpowers",
       "sourceType": "github",
@@ -55,6 +65,11 @@
       "source": "vercel-labs/agent-skills",
       "sourceType": "github",
       "computedHash": "43ca6c197f8ec13055079da7053232d477068b03ca443f9ac1bc819b95cdd432"
+    },
+    "web-research": {
+      "source": "langchain-ai/deepagents",
+      "sourceType": "github",
+      "computedHash": "c91e55da8a6e313c9ec9962ec2699ccef5caee1ea15c9d7a71db6274ab7c90b6"
     }
   }
 }
