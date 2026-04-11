@@ -99,10 +99,7 @@ const SideBar = ({
       }
 
       if (selectedTimeframe === "Last 7 Days") {
-        return (
-          item.updatedAt <= yesterdayEnd.toISOString() &&
-          item.updatedAt >= weekCutoff
-        );
+        return item.updatedAt >= weekCutoff;
       }
 
       return item.updatedAt >= monthCutoff;
@@ -251,15 +248,15 @@ const SideBar = ({
             )}
           </div>
 
-          <div className="mt-auto border-t border-border px-4 pt-6">
+          <div className="mt-auto border-t border-border px-4 pt-4">
             <motion.button
               type="button"
-              className="flex w-full items-center gap-3 px-4 pl-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              className="flex w-full items-center gap-3 rounded-md px-2 py-2 text-left text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
-              <HelpCircle className="size-4" />
+              <HelpCircle className="size-4 shrink-0" />
               <span
                 className={cn(
-                  "text-[11px] tracking-[0.16em] uppercase",
+                  "text-[11px] uppercase tracking-[0.16em]",
                   mono.className,
                 )}
               >
@@ -322,7 +319,6 @@ const SideBar = ({
                       type="button"
                       onClick={() => {
                         setSelectedTimeframe(item.label);
-                        setIsMobileMenuOpen(false);
                       }}
                       className={cn(
                         "flex items-center gap-3 px-3 py-2 text-left",
@@ -345,29 +341,23 @@ const SideBar = ({
                 })}
               </nav>
 
-              <div className="border-t border-border px-3 py-4">
-                {filteredNavItems.map((project) => (
-                  <button
-                    key={`mobile-feed-${project.id}`}
+              <div className="border-t border-border px-3 py-4 min-w-full">
+                {filteredNavItems.map((project, index) => (
+                  <motion.button
+                    key={project.id}
                     type="button"
-                    className="mb-2 flex w-full flex-col border border-border p-3 text-left"
+                    className="logic-feed-item border border-border p-3 text-left transition-colors hover:border-muted-foreground max-w-full"
+                    {...fadeLeft(0.12 + index * 0.04)}
                   >
-                    <span className="truncate text-xs font-bold">
-                      {project.title}
-                    </span>
-                    <span
-                      className={cn(
-                        "mt-1 text-[10px] text-muted-foreground",
-                        mono.className,
-                      )}
-                    >
-                      {new Date().toLocaleDateString(undefined, {
-                        month: "short",
-                        day: "numeric",
-                      })}{" "}
-                      - {project.description}
-                    </span>
-                  </button>
+                    <div className="mb-1 flex items-start justify-between gap-3">
+                      <span className="truncate text-xs font-bold">
+                        {project.title}
+                      </span>
+                    </div>
+                    <p className="truncate text-[11px] text-muted-foreground text-ellipsis">
+                      {project.description}
+                    </p>
+                  </motion.button>
                 ))}
                 {filteredNavItems.length === 0 && (
                   <div

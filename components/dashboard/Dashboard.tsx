@@ -306,47 +306,72 @@ const Dashboard = () => {
               {...fadeUp(0.28)}
             >
               <div className="border border-input bg-card/80 shadow-2xl shadow-black/30">
-                <div className="flex items-center gap-2 border-b border-border px-3 py-2">
-                  <Button
-                    variant={spec === "web" ? "secondary" : "ghost"}
-                    size="xs"
-                    className={cn(
-                      "h-7 px-2",
-                      spec === "mobile" && "text-muted-foreground",
-                    )}
-                    onClick={() => setSpec("web")}
-                    aria-pressed={spec === "web"}
-                  >
-                    <Monitor data-icon="inline-start" />
-                    <span
+                <div className="flex items-center justify-between border-b border-border px-3 py-2">
+                  <div className="flex items-center gap-2 ">
+                    <Button
+                      variant={spec === "web" ? "secondary" : "ghost"}
+                      size="xs"
                       className={cn(
-                        "text-[10px] tracking-[0.18em] uppercase",
+                        "h-7 px-2",
+                        spec === "mobile" && "text-muted-foreground",
+                      )}
+                      onClick={() => setSpec("web")}
+                      aria-pressed={spec === "web"}
+                    >
+                      <Monitor data-icon="inline-start" />
+                      <span
+                        className={cn(
+                          "text-[10px] tracking-[0.18em] uppercase",
+                          mono.className,
+                        )}
+                      >
+                        Web
+                      </span>
+                    </Button>
+                    <Button
+                      variant={spec === "mobile" ? "secondary" : "ghost"}
+                      size="xs"
+                      className={cn(
+                        "h-7 px-2",
+                        spec === "web" && "text-muted-foreground",
+                      )}
+                      onClick={() => setSpec("mobile")}
+                      aria-pressed={spec === "mobile"}
+                    >
+                      <Smartphone data-icon="inline-start" />
+                      <span
+                        className={cn(
+                          "text-[10px] tracking-[0.18em] uppercase",
+                          mono.className,
+                        )}
+                      >
+                        App
+                      </span>
+                    </Button>
+                  </div>
+                  <Select
+                    value={selectedModel}
+                    onValueChange={setSelectedModel}
+                  >
+                    <SelectTrigger
+                      size="sm"
+                      className={cn(
+                        "h-8 min-w-35 border-input bg-muted text-[10px] tracking-[0.16em] uppercase",
                         mono.className,
                       )}
                     >
-                      Web
-                    </span>
-                  </Button>
-                  <Button
-                    variant={spec === "mobile" ? "secondary" : "ghost"}
-                    size="xs"
-                    className={cn(
-                      "h-7 px-2",
-                      spec === "web" && "text-muted-foreground",
-                    )}
-                    onClick={() => setSpec("mobile")}
-                    aria-pressed={spec === "mobile"}
-                  >
-                    <Smartphone data-icon="inline-start" />
-                    <span
-                      className={cn(
-                        "text-[10px] tracking-[0.18em] uppercase",
-                        mono.className,
-                      )}
-                    >
-                      App
-                    </span>
-                  </Button>
+                      <SelectValue placeholder="gemma4" />
+                    </SelectTrigger>
+                    <SelectContent className="mt-10 min-w-35 border border-input bg-muted text-foreground">
+                      <SelectGroup>
+                        <SelectItem value="gemma4:31b-cloud">gemma4</SelectItem>
+                        <SelectItem value="llama3.1:8b">llama3.1</SelectItem>
+                        <SelectItem value="deepseek-v3.1:671b-cloud">
+                          deepseek-v3.1
+                        </SelectItem>
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div className="flex min-h-16 items-center gap-1 p-2">
@@ -365,7 +390,7 @@ const Dashboard = () => {
                       "h-10 w-full border-none bg-transparent px-2 text-sm text-foreground outline-none placeholder:text-muted-foreground",
                       mono.className,
                     )}
-                    placeholder="COMMAND: INPUT_NEW_DESIGN_PARAMETERS..."
+                    placeholder="Design a dashboard with 3 KPI cards and a line chart showing revenue trends."
                     type="text"
                     value={command}
                     onChange={(event) => setCommand(event.target.value)}
@@ -379,32 +404,6 @@ const Dashboard = () => {
                   />
 
                   <div className="ml-1 flex items-center gap-1 border-l border-border pl-2">
-                    <Select
-                      value={selectedModel}
-                      onValueChange={setSelectedModel}
-                    >
-                      <SelectTrigger
-                        size="sm"
-                        className={cn(
-                          "h-8 min-w-35 border-input bg-muted text-[10px] tracking-[0.16em] uppercase",
-                          mono.className,
-                        )}
-                      >
-                        <SelectValue placeholder="gemma4" />
-                      </SelectTrigger>
-                      <SelectContent className="mt-10 min-w-35 border border-input bg-muted text-foreground">
-                        <SelectGroup>
-                          <SelectItem value="gemma4:31b-cloud">
-                            gemma4
-                          </SelectItem>
-                          <SelectItem value="llama3.1:8b">llama3.1</SelectItem>
-                          <SelectItem value="deepseek-v3.1:671b-cloud">
-                            deepseek-v3.1
-                          </SelectItem>
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
-
                     <Button
                       variant="ghost"
                       size="icon-sm"
