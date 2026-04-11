@@ -17,6 +17,7 @@ export type ProjectSummary = {
 
 type CreateProjectInput = {
   prompt: string;
+  platform: "web" | "mobile";
 };
 
 type CreateProjectResult = {
@@ -37,11 +38,15 @@ async function listProjects() {
   return requestApi<ProjectSummary[]>("/api/projects/all");
 }
 
-async function createProject({ prompt }: CreateProjectInput) {
+async function createProject({ prompt, platform }: CreateProjectInput) {
   const normalizedPrompt = prompt.trim();
 
-  if (!normalizedPrompt) {
-    throw new ApiError("Prompt is required.", 400, "INVALID_PROMPT");
+  if (!normalizedPrompt || !platform) {
+    throw new ApiError(
+      "Prompt and platform are required.",
+      400,
+      "INVALID_PROMPT",
+    );
   }
 
   return requestApi<CreateProjectResult>("/api/projects", {
@@ -49,7 +54,7 @@ async function createProject({ prompt }: CreateProjectInput) {
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ prompt: normalizedPrompt }),
+    body: JSON.stringify({ prompt: normalizedPrompt, platform }),
   });
 }
 
@@ -70,36 +75,36 @@ export function useCreateProjectMutation() {
 
   return useMutation({
     mutationFn: createProject,
-    onSuccess: async (createdProject) => {
-      queryClient.setQueryData<ProjectSummary[]>(
-        projectKeys.list(),
-        (currentProjects) => {
-          if (!currentProjects) {
-            return currentProjects;
-          }
+    // onSuccess: async (createdProject) => {
+    //   queryClient.setQueryData<ProjectSummary[]>(
+    //     projectKeys.list(),
+    //     (currentProjects) => {
+    //       if (!currentProjects) {
+    //         return currentProjects;
+    //       }
 
-          if (
-            currentProjects.some(
-              (project) => project.id === createdProject.projectId,
-            )
-          ) {
-            return currentProjects;
-          }
+    //       if (
+    //         currentProjects.some(
+    //           (project) => project.id === createdProject.projectId,
+    //         )
+    //       ) {
+    //         return currentProjects;
+    //       }
 
-          return [
-            {
-              id: createdProject.projectId,
-              title: createdProject.title,
-              description: createdProject.description,
-              thumbnailUrl: null,
-              updatedAt: createdProject.updatedAt,
-            },
-            ...currentProjects,
-          ];
-        },
-      );
+    //       return [
+    //         {
+    //           id: createdProject.projectId,
+    //           title: createdProject.title,
+    //           description: createdProject.description,
+    //           thumbnailUrl: null,
+    //           updatedAt: createdProject.updatedAt,
+    //         },
+    //         ...currentProjects,
+    //       ];
+    //     },
+    //   );
 
-      await queryClient.invalidateQueries({ queryKey: projectKeys.all });
-    },
+    //   await queryClient.invalidateQueries({ queryKey: projectKeys.all });
+    // },
   });
 }

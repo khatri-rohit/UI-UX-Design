@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { JetBrains_Mono } from "next/font/google";
 import { useRouter } from "next/navigation";
@@ -35,6 +35,7 @@ import {
 } from "@/lib/clerkAppearance";
 import SideBar from "./SideBar";
 import { useUserActivityStore } from "@/providers/zustand-provider";
+import { useCreateProjectMutation } from "@/lib/projects/queries";
 
 const STUDIO_PROMPT_STORAGE_KEY = "uiuxbuilder:studioPrompt";
 
@@ -80,12 +81,16 @@ const Dashboard = () => {
   const spec = useUserActivityStore((state) => state.spec);
   const setSpec = useUserActivityStore((state) => state.setSpec);
 
+  const { mutate, status, data } = useCreateProjectMutation();
   const router = useRouter();
-  const shouldReduceMotion = useReducedMotion();
-  const commandInputRef = useRef<HTMLInputElement | null>(null);
 
+  const shouldReduceMotion = useReducedMotion();
+
+  const [error, setError] = useState<string | null>(null);
   const [command, setCommand] = useState("");
   const [selectedModel, setSelectedModel] = useState("gemma4:31b-cloud");
+
+  const commandInputRef = useRef<HTMLInputElement | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const launcherButtonRef = useRef<HTMLButtonElement | null>(null);
 
@@ -134,21 +139,21 @@ const Dashboard = () => {
     }
 
     try {
-      window.sessionStorage.setItem(
-        STUDIO_PROMPT_STORAGE_KEY,
-        normalizedPrompt,
-      );
+      mutate({ prompt: normalizedPrompt, platform: spec });
     } catch {
       // Ignore storage failures; studio still has URL fallbacks for minimal state.
+      setError(
+        "Failed to initiate new design. Please check your connection and try again.",
+      );
     }
-
-    // const params = new URLSearchParams({
-    //   platform,
-    //   model: selectedModel,
-    // });
-
-    router.push("/studio");
   };
+
+  useEffect(() => {
+    if (status === "success" && data) {
+      const projectId = data.projectId;
+      router.push(`/studio/${projectId}`);
+    }
+  }, [status, data, router]);
 
   return (
     <div
@@ -423,6 +428,12 @@ const Dashboard = () => {
                   </div>
                 </div>
               </div>
+
+              {error && (
+                <div className="mt-2 rounded bg-destructive/50 px-3 py-2 text-sm text-destructive">
+                  {error}
+                </div>
+              )}
 
               <motion.div
                 className="logic-status mt-4 flex items-center justify-between gap-4 px-2"

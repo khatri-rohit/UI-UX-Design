@@ -16,6 +16,8 @@ import { Button } from "@/components/ui/button";
 import { useProjectsQuery } from "@/lib/projects/queries";
 import { useUserActivityStore } from "@/providers/zustand-provider";
 import { Timeframe } from "@/stores/user-activity";
+import { useRouter } from "next/navigation";
+import Image from "next/image";
 
 const mono = JetBrains_Mono({
   subsets: ["latin"],
@@ -51,6 +53,8 @@ const SideBar = ({
     (state) => state.setSelectedTimeframe,
   );
 
+  const router = useRouter();
+
   const shouldReduceMotion = useReducedMotion();
   const mobileDrawerRef = useRef<HTMLElement | null>(null);
 
@@ -68,6 +72,7 @@ const SideBar = ({
         };
 
   const { data: projects = [] } = useProjectsQuery();
+
   const filteredNavItems = useMemo(() => {
     if (projects.length === 0) {
       return [];
@@ -105,6 +110,10 @@ const SideBar = ({
       return item.updatedAt >= monthCutoff;
     });
   }, [projects, selectedTimeframe]);
+
+  const handleOpenProject = (projectId: string) => {
+    router.push(`/studio/${projectId}`);
+  };
 
   useEffect(() => {
     if (!isMobileMenuOpen) {
@@ -170,7 +179,7 @@ const SideBar = ({
   return (
     <>
       <motion.aside
-        className="logic-sidebar hidden max-w-64 min-w-64 pt-14 shrink-0 border-r border-border bg-background md:flex w-full"
+        className="logic-sidebar hidden w-full max-w-72 pt-14 shrink-0 border-r border-border bg-background md:flex"
         {...fadeLeft(0.06)}
       >
         <div className="flex h-full flex-col py-6">
@@ -218,22 +227,34 @@ const SideBar = ({
             </nav>
           </div>
 
-          <div className="mt-8 flex flex-1 flex-col gap-4 px-4 max-w-64 min-w-64">
+          <div className="mt-8 flex flex-1 flex-col gap-4 px-4 w-full max-w-72">
             {filteredNavItems.map((project, index) => (
               <motion.button
                 key={project.id}
                 type="button"
-                className="logic-feed-item border border-border p-3 text-left transition-colors hover:border-muted-foreground"
+                className="logic-feed-item group w-full overflow-hidden rounded-lg border border-border bg-card/40 p-2 text-left hover:border-muted-foreground hover:bg-muted/40 hover:-translate-y-0.5 transition-all duration-300 cursor-pointer"
                 {...fadeLeft(0.12 + index * 0.04)}
+                onClick={() => handleOpenProject(project.id)}
               >
-                <div className="mb-1 flex items-start justify-between gap-3">
-                  <span className="truncate text-xs font-bold">
-                    {project.title}
-                  </span>
+                <div className="flex items-start gap-3">
+                  <div className="size-10 shrink-0 overflow-hidden rounded-md border border-border/70 bg-muted/40">
+                    <Image
+                      src="/thumbnail.jpg"
+                      alt={project.title}
+                      width={64}
+                      height={64}
+                      className="h-full w-full object-cover"
+                    />
+                  </div>
+                  <div className="flex min-w-0 flex-1 flex-col justify-center">
+                    <span className="truncate text-xs font-semibold">
+                      {project.title}
+                    </span>
+                    <p className="mt-1 truncate text-[11px] leading-4 text-muted-foreground">
+                      {project.description}
+                    </p>
+                  </div>
                 </div>
-                <p className="truncate text-[11px] text-muted-foreground text-ellipsis">
-                  {project.description}
-                </p>
               </motion.button>
             ))}
             {filteredNavItems.length === 0 && (
@@ -317,9 +338,7 @@ const SideBar = ({
                     <button
                       key={`mobile-${item.label}`}
                       type="button"
-                      onClick={() => {
-                        setSelectedTimeframe(item.label);
-                      }}
+                      onClick={() => setSelectedTimeframe(item.label)}
                       className={cn(
                         "flex items-center gap-3 px-3 py-2 text-left",
                         selectedTimeframe === item.label
@@ -346,17 +365,29 @@ const SideBar = ({
                   <motion.button
                     key={project.id}
                     type="button"
-                    className="logic-feed-item border border-border p-3 text-left transition-colors hover:border-muted-foreground max-w-full"
+                    className="logic-feed-item group w-full overflow-hidden rounded-lg border border-border bg-card/40 p-2 text-left hover:border-muted-foreground hover:bg-muted/40 hover:-translate-y-1 hover:mb-3 transition-all duration-300 cursor-pointer"
                     {...fadeLeft(0.12 + index * 0.04)}
+                    onClick={() => handleOpenProject(project.id)}
                   >
-                    <div className="mb-1 flex items-start justify-between gap-3">
-                      <span className="truncate text-xs font-bold">
-                        {project.title}
-                      </span>
+                    <div className="flex items-start gap-3">
+                      <div className="size-10 shrink-0 overflow-hidden rounded-md border border-border/70 bg-muted/40">
+                        <Image
+                          src="/thumbnail.jpg"
+                          alt={project.title}
+                          width={56}
+                          height={56}
+                          className="h-full w-full object-cover"
+                        />
+                      </div>
+                      <div className="flex min-w-0 flex-1 flex-col justify-center">
+                        <span className="truncate text-xs font-semibold">
+                          {project.title}
+                        </span>
+                        <p className="mt-1 truncate text-[11px] leading-4 text-muted-foreground">
+                          {project.description}
+                        </p>
+                      </div>
                     </div>
-                    <p className="truncate text-[11px] text-muted-foreground text-ellipsis">
-                      {project.description}
-                    </p>
                   </motion.button>
                 ))}
                 {filteredNavItems.length === 0 && (

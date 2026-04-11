@@ -25,8 +25,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const body = (await req.json()) as { prompt?: unknown };
+    const body = (await req.json()) as { prompt?: unknown; platform?: unknown };
     const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
+    const platform =
+      typeof body.platform === "string" ? body.platform.trim() : "";
 
     if (!prompt) {
       return NextResponse.json(
@@ -61,6 +63,7 @@ export async function POST(req: NextRequest) {
         title: projectTitle || "Untitled Project",
         description: projectDescription || "",
         initialPrompt: prompt,
+        platform: platform ?? spec,
       },
     });
 
@@ -71,11 +74,11 @@ export async function POST(req: NextRequest) {
         error: false,
         data: {
           projectId: newProject.id,
-          title: newProject.title,
-          description: newProject.description,
-          spec,
+          // title: newProject.title,
+          // description: newProject.description,
+          // spec,
         },
-        message: "Project created successfully.",
+        message: "New project created successfully.",
       },
       { status: 201 },
     );
