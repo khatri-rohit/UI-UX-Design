@@ -77,7 +77,7 @@ export default function CustomForgotPasswordFlow() {
     await signIn.finalize({
       navigate: ({ session, decorateUrl }) => {
         const target =
-          getTaskNavigationTarget(session as SessionWithTask) ?? "/studio";
+          getTaskNavigationTarget(session as SessionWithTask) ?? "/";
         const url = decorateUrl(target);
         if (url.startsWith("http")) {
           window.location.href = url;

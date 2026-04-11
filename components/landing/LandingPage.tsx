@@ -21,7 +21,8 @@ const LandingPage = () => {
   const router = useRouter();
 
   const handleStarterSubmit = (value: string) => {
-    router.push(`/studio?prompt=${encodeURIComponent(value)}`);
+    sessionStorage.setItem("initialPrompt", value);
+    router.push("/sign-up");
   };
 
   return (

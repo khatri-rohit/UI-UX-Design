@@ -1,7 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { auth } from "@clerk/nextjs/server";
+import { auth, clerkClient as getClerkClient } from "@clerk/nextjs/server";
 
-import { clerkClient } from "@/lib/client";
 import logger from "@/lib/logger";
 import prisma from "@/lib/prisma";
 
@@ -196,6 +195,7 @@ function extractOrganizationClaims(sessionClaims: SessionClaims | null): {
 
 async function fetchClerkUser(clerkUserId: string): Promise<any | null> {
   try {
+    const clerkClient = await getClerkClient();
     return await clerkClient.users.getUser(clerkUserId);
   } catch (error) {
     logger.warn("Failed to fetch Clerk user for auth context", {
@@ -212,7 +212,6 @@ export async function requireAuthContext(
   const authState = await auth();
   const sessionClaims = (authState.sessionClaims ??
     null) as SessionClaims | null;
-
   if (!authState.userId) {
     throw new UnauthorizedError();
   }

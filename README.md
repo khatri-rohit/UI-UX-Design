@@ -69,7 +69,7 @@ Authentication is powered by Clerk with custom UI flows in `components/auth`.
 Required auth environment variables:
 
 ```env
-CLERK_PUBLISHABLE_KEY=
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=
 CLERK_SECRET_KEY=
 CLERK_WEBHOOK_SIGNING_SECRET=
 ```
@@ -78,6 +78,14 @@ Optional compatibility key:
 
 ```env
 CLERK_WEBHOOK_SECRET=
+```
+
+Advanced optional overrides (only for non-default Clerk setups):
+
+```env
+CLERK_API_URL=
+CLERK_API_VERSION=v1
+CLERK_JWT_KEY=
 ```
 
 ## Prisma + Supabase (Prisma ORM v7)

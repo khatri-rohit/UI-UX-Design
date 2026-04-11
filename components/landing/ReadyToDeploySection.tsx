@@ -26,7 +26,7 @@ export function ReadyToDeploySection() {
     }
 
     setIsSubmitting(true);
-    router.push("/studio");
+    router.push("/");
   };
 
   return (

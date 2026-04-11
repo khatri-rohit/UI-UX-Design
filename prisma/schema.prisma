@@ -21,12 +21,12 @@ model User {
     auditEvents      AuthAuditEvent[]
     createdAt        DateTime         @default(now())
     updatedAt        DateTime         @updatedAt
+    projects         Project[]
 }
 
 model AppSession {
     id             String        @id @default(cuid())
     userId         String
-    user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
     clerkSessionId String        @unique
     status         SessionStatus @default(ACTIVE)
     issuedAt       DateTime
@@ -37,6 +37,8 @@ model AppSession {
     createdAt      DateTime      @default(now())
     updatedAt      DateTime      @updatedAt
 
+    user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
     @@index([userId, createdAt])
     @@index([status])
 }
@@ -44,13 +46,14 @@ model AppSession {
 model AuthAuditEvent {
     id             String           @id @default(cuid())
     userId         String?
-    user           User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
     clerkUserId    String?
     clerkSessionId String?
     eventType      String
     eventSource    AuditEventSource @default(REQUEST)
     metadata       Json?
     createdAt      DateTime         @default(now())
+
+    user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
     @@index([userId, createdAt])
     @@index([clerkUserId, createdAt])
@@ -61,6 +64,41 @@ model ClerkWebhookEvent {
     id         String   @id
     eventType  String
     receivedAt DateTime @default(now())
+}
+
+model Project {
+    id            String   @id @default(cuid())
+    userId        String
+    title         String?
+    description   String?
+    platform      String?
+    initialPrompt String?
+    canvasState   Json?
+    thumbnailUrl  String?
+    createdAt     DateTime @default(now())
+    updatedAt     DateTime @updatedAt
+
+    user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+    generations Generation[]
+
+    @@index([userId, createdAt])
+    @@map("Project")
+}
+
+model Generation {
+    id        String   @id @default(cuid())
+    projectId String
+    model     String
+    spec      Json
+    prompt    String
+    screens   Json?
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+    @@index([projectId, createdAt])
+    @@map("Generation")
 }
 
 enum Role {

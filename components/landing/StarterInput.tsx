@@ -1,8 +1,8 @@
-import { type FormEvent, useState } from "react";
+import { type FormEvent, KeyboardEvent, useState } from "react";
 import { CornerDownLeft } from "lucide-react";
 
 type StarterInputProps = {
-  onSubmit?: (value: string) => void;
+  onSubmit: (value: string) => void;
 };
 
 const StarterInput = ({ onSubmit }: StarterInputProps) => {
@@ -17,7 +17,7 @@ const StarterInput = ({ onSubmit }: StarterInputProps) => {
       return;
     }
 
-    onSubmit?.(prompt);
+    onSubmit(prompt);
   };
 
   const showAnimatedPrompt = !isFocused && inputValue.trim() === "";
@@ -49,6 +49,11 @@ const StarterInput = ({ onSubmit }: StarterInputProps) => {
           onChange={(event) => setInputValue(event.target.value)}
           onFocus={() => setIsFocused(true)}
           onBlur={() => setIsFocused(false)}
+          onKeyUp={(event: KeyboardEvent<HTMLInputElement>) => {
+            if (event.key === "Enter" && !event.shiftKey) {
+              onSubmit(inputValue.trim());
+            }
+          }}
           placeholder={
             isFocused ? "Generate a sleek fintech mobile app..." : ""
           }

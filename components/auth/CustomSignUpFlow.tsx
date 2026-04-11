@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth, useSignUp } from "@clerk/nextjs";
 
+import { useCreateProjectMutation } from "@/lib/projects/queries";
 import { cn } from "@/lib/utils";
 
 type ClerkFieldError = { message?: string };
@@ -79,6 +80,7 @@ export default function CustomSignUpFlow() {
   const { isSignedIn } = useAuth();
   const { signUp, errors, fetchStatus } = useSignUp();
   const oauthAutoStartedRef = useRef(false);
+  const postAuthHandledRef = useRef(false);
 
   const [emailAddress, setEmailAddress] = useState("");
   const [password, setPassword] = useState("");
@@ -86,6 +88,7 @@ export default function CustomSignUpFlow() {
   const [statusMessage, setStatusMessage] = useState("");
   const [oauthLoadingProvider, setOauthLoadingProvider] =
     useState<OAuthProvider | null>(null);
+  const { mutateAsync: createProjectFromPrompt } = useCreateProjectMutation();
 
   const isLoading = fetchStatus === "fetching";
   const isAnyAuthFlowLoading = isLoading || oauthLoadingProvider !== null;
@@ -167,8 +170,14 @@ export default function CustomSignUpFlow() {
     await signUp.finalize({
       navigate: ({ session, decorateUrl }) => {
         const target =
-          getTaskNavigationTarget(session as SessionWithTask) ?? "/studio";
+          getTaskNavigationTarget(session as SessionWithTask) ?? "/";
         const url = decorateUrl(target);
+
+        // Keep the user on this page while we provision the first project after session hydration.
+        if (sessionStorage.getItem("initialPrompt")?.trim()) {
+          return;
+        }
+
         if (url.startsWith("http")) {
           window.location.href = url;
           return;
@@ -235,14 +244,38 @@ export default function CustomSignUpFlow() {
   };
 
   useEffect(() => {
-    if (!signUp) {
+    if (!signUp || !isSignedIn || postAuthHandledRef.current) {
       return;
     }
 
-    if (isSignedIn || signUp.status === "complete") {
-      router.replace("/studio");
+    postAuthHandledRef.current = true;
+
+    const initialPrompt = sessionStorage.getItem("initialPrompt")?.trim();
+
+    if (!initialPrompt) {
+      router.replace("/");
+      return;
     }
-  }, [isSignedIn, router, signUp]);
+
+    void createProjectFromPrompt({ prompt: initialPrompt, platform: "web" })
+      .then((project) => {
+        sessionStorage.removeItem("initialPrompt");
+
+        if (project.projectId) {
+          router.replace(`/studio/${project.projectId}`);
+          return;
+        }
+
+        router.replace("/");
+      })
+      .catch((error: unknown) => {
+        console.error("Failed to create post-sign-up project", error);
+        setStatusMessage(
+          "Account created, but project setup failed. You can create one from the dashboard.",
+        );
+        router.replace("/");
+      });
+  }, [createProjectFromPrompt, isSignedIn, router, signUp]);
 
   if (!signUp) {
     return <div className="text-zinc-400 text-sm">Loading sign-up...</div>;
