@@ -212,7 +212,6 @@ export async function requireAuthContext(
   const authState = await auth();
   const sessionClaims = (authState.sessionClaims ??
     null) as SessionClaims | null;
-  console.log(authState);
   if (!authState.userId) {
     throw new UnauthorizedError();
   }

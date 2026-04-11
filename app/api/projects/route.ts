@@ -6,59 +6,6 @@ import { initializeOllama } from "@/lib/ollama";
 import logger from "@/lib/logger";
 import { isAuthError, requireAuthContext } from "@/lib/get-auth";
 
-export async function GET(req: NextRequest) {
-  const authContext = await requireAuthContext({
-    request: req,
-    eventType: "project.listed",
-  });
-
-  if (!authContext.appUserId) {
-    return NextResponse.json(
-      {
-        error: true,
-        message: "Unauthorized: Missing user ID in auth context",
-        data: null,
-      },
-      { status: 401 },
-    );
-  }
-
-  try {
-    const projects = await prisma.project.findMany({
-      where: {
-        userId: authContext.appUserId,
-      },
-      select: {
-        id: true,
-        title: true,
-        description: true,
-        thumbnailUrl: true,
-      },
-    });
-
-    return NextResponse.json(
-      {
-        error: false,
-        data: projects,
-        message: "Projects retrieved successfully.",
-      },
-      { status: 200 },
-    );
-  } catch (error) {
-    if (isAuthError(error)) {
-      return NextResponse.json(
-        {
-          error: true,
-          code: error.code,
-          message: error.message,
-          data: null,
-        },
-        { status: error.status },
-      );
-    }
-  }
-}
-
 // This API route will handle project creation based on user prompts from the landing page.
 export async function POST(req: NextRequest) {
   try {

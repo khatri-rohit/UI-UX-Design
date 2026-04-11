@@ -16,8 +16,9 @@ import {
   LucideIcon,
   X,
 } from "lucide-react";
-import { JetBrains_Mono } from "next/font/google";
+import { JetBrains_Mono, Playwrite_BE_VLG } from "next/font/google";
 import { Button } from "@/components/ui/button";
+import { useProjectsQuery } from "@/lib/projects/queries";
 
 const mono = JetBrains_Mono({
   subsets: ["latin"],
@@ -30,27 +31,36 @@ const FOCUSABLE_SELECTOR =
 const navItems: Array<{ label: string; icon: LucideIcon }> = [
   { label: "Recent", icon: History },
   { label: "Yesterday", icon: CalendarDays },
+  { label: "Last 7 Days", icon: CalendarDays },
   { label: "Last 30 Days", icon: CalendarDays },
-  { label: "Examples", icon: FolderKanban },
+  // { label: "Examples", icon: FolderKanban },
 ];
 
-const projectFeed: Array<{ name: string; time: string; detail: string }> = [
-  {
-    name: "CORE_ENGINE_V1",
-    time: "08:42",
-    detail: "Optimizing shader passes...",
-  },
-  {
-    name: "UI_SCAFFOLD_PROTOTYPE",
-    time: "YEST",
-    detail: "Refactoring flexbox grid...",
-  },
-  {
-    name: "DATA_VIZ_EXPERIMENTAL",
-    time: "12.04",
-    detail: "Canvas API implementation",
-  },
-];
+// const projectFeed: Array<{
+//   id: string;
+//   title: string;
+//   time: string;
+//   description: string;
+// }> = [
+//   {
+//     id: "1",
+//     title: "CORE_ENGINE_V1",
+//     time: "08:42",
+//     description: "Optimizing shader passes...",
+//   },
+//   {
+//     id: "2",
+//     title: "UI_SCAFFOLD_PROTOTYPE",
+//     time: "YEST",
+//     description: "Refactoring flexabox grid...",
+//   },
+//   {
+//     id: "3",
+//     title: "DATA_VIZ_EXPERIMENTAL",
+//     time: "12.04",
+//     description: "Canvas API implementation",
+//   },
+// ];
 
 interface SidebarProps {
   setIsMobileMenuOpen: Dispatch<SetStateAction<boolean>>;
@@ -81,6 +91,48 @@ const SideBar = ({
             ease: [0.22, 1, 0.36, 1] as [number, number, number, number],
           },
         };
+
+  const { data: projects = [] } = useProjectsQuery();
+
+  const filteredNavItems = projects.filter((item) => {
+    const yesterdayStart = new Date();
+    yesterdayStart.setDate(yesterdayStart.getDate() - 1);
+    yesterdayStart.setHours(0, 0, 0, 0);
+    const yesterdayEnd = new Date();
+    yesterdayEnd.setDate(yesterdayEnd.getDate() - 1);
+    yesterdayEnd.setHours(23, 59, 59, 999);
+
+    if (activeNavItem === "Recent") {
+      console.log(new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
+      return (
+        item.updatedAt >=
+        new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+      );
+    } else if (activeNavItem === "Yesterday") {
+      console.log(yesterdayStart.toISOString());
+      console.log(yesterdayEnd.toISOString());
+      return (
+        item.updatedAt >= yesterdayStart.toISOString() &&
+        item.updatedAt <= yesterdayEnd.toISOString()
+      );
+    } else if (activeNavItem === "Last 7 Days") {
+      console.log(yesterdayEnd.toISOString());
+      console.log(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString());
+      return (
+        item.updatedAt <= yesterdayEnd.toISOString() &&
+        item.updatedAt >=
+          new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+      );
+    } else {
+      console.log(
+        new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+      );
+      return (
+        item.updatedAt >=
+        new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+      );
+    }
+  });
 
   useEffect(() => {
     if (!isMobileMenuOpen) {
@@ -146,7 +198,7 @@ const SideBar = ({
   return (
     <>
       <motion.aside
-        className="logic-sidebar hidden w-64 pt-14 shrink-0 border-r border-border bg-background md:flex"
+        className="logic-sidebar hidden max-w-64 min-w-64 pt-14 shrink-0 border-r border-border bg-background md:flex w-full"
         {...fadeLeft(0.06)}
       >
         <div className="flex h-full flex-col py-6">
@@ -165,7 +217,7 @@ const SideBar = ({
                 const Icon = item.icon;
 
                 return (
-                  <button
+                  <motion.button
                     key={item.label}
                     type="button"
                     onClick={() => setActiveNavItem(item.label)}
@@ -188,92 +240,44 @@ const SideBar = ({
                     >
                       {item.label}
                     </span>
-                  </button>
+                  </motion.button>
                 );
               })}
             </nav>
           </div>
 
-          <div className="mt-8 flex flex-1 flex-col gap-4 px-4">
-            {projectFeed.map((project, index) => (
+          <div className="mt-8 flex flex-1 flex-col gap-4 px-4 max-w-64 min-w-64">
+            {filteredNavItems.map((project, index) => (
               <motion.button
-                key={project.name}
+                key={project.title}
                 type="button"
                 className="logic-feed-item border border-border p-3 text-left transition-colors hover:border-muted-foreground"
                 {...fadeLeft(0.12 + index * 0.04)}
               >
                 <div className="mb-1 flex items-start justify-between gap-3">
                   <span className="truncate text-xs font-bold">
-                    {project.name}
-                  </span>
-                  <span
-                    className={cn(
-                      "text-[9px] text-muted-foreground",
-                      mono.className,
-                    )}
-                  >
-                    {project.time}
+                    {project.title}
                   </span>
                 </div>
-                <p className="truncate text-[11px] text-muted-foreground">
-                  {project.detail}
+                <p className="truncate text-[11px] text-muted-foreground text-ellipsis">
+                  {project.description}
                 </p>
               </motion.button>
             ))}
+            {filteredNavItems.length === 0 && (
+              <div
+                className={cn(
+                  "text-[11px] text-muted-foreground px-3 leading-4 text-pretty",
+                  mono.className,
+                )}
+              >
+                No projects found for the selected timeframe.
+              </div>
+            )}
           </div>
 
           <div className="mt-auto border-t border-border px-4 pt-6">
-            {/* <Select value="" onValueChange={handleSettingsSelect}>
-                <SelectTrigger
-                  className={cn(
-                    "h-9 w-full text-[10px] uppercase tracking-[0.16em] border-border bg-card/70 text-muted-foreground hover:text-foreground transition-colors",
-                    mono.className,
-                  )}
-                >
-                  <Settings className="size-4" data-icon="inline-start" />
-                  <SelectValue placeholder="Settings" />
-                </SelectTrigger>
-
-                <SelectContent
-                  position="popper"
-                  side="top"
-                  align="end"
-                  sideOffset={8}
-                  className={cn(
-                    "dark mt-0! max-w-55! rounded-none! border! border-border! bg-background! p-0! text-foreground! ring-0! shadow-[0_0_0_1px_rgba(255,255,255,0.06),0_16px_32px_-18px_rgba(0,0,0,0.9)]!",
-                    mono.className,
-                  )}
-                >
-                  <SelectGroup className="scroll-my-0! p-0!">
-                    {[
-                      { value: "profile", label: "Profile" },
-                      { value: "settings", label: "Settings" },
-                      { value: "support", label: "Support" },
-                      {
-                        value: "logout",
-                        label: isSigningOut ? "Signing out..." : "Logout",
-                        disabled: isSigningOut,
-                      },
-                    ].map((item) => (
-                      <SelectItem
-                        key={item.value}
-                        value={item.value}
-                        disabled={item.disabled}
-                        className={cn(
-                          "relative! h-9! cursor-pointer! rounded-none! border-b! border-border! px-3! py-0! text-[10px]! uppercase! tracking-[0.16em]! text-muted-foreground! outline-none!",
-                          "last:border-b-0! data-highlighted:bg-muted! data-highlighted:text-foreground! data-[state=checked]:text-foreground!",
-                          mono.className,
-                          item.value === "logout" &&
-                            "text-destructive! data-highlighted:bg-destructive/10! data-highlighted:text-destructive!",
-                        )}
-                      >
-                        {item.label}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select> */}
-            <button
+            <motion.button
               type="button"
               className="flex w-full items-center gap-3 px-4 pl-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
@@ -286,7 +290,7 @@ const SideBar = ({
               >
                 Support
               </span>
-            </button>
+            </motion.button>
           </div>
         </div>
       </motion.aside>
@@ -367,14 +371,14 @@ const SideBar = ({
               </nav>
 
               <div className="border-t border-border px-3 py-4">
-                {projectFeed.map((project) => (
+                {projects.map((project) => (
                   <button
-                    key={`mobile-feed-${project.name}`}
+                    key={`mobile-feed-${project.id}`}
                     type="button"
                     className="mb-2 flex w-full flex-col border border-border p-3 text-left"
                   >
                     <span className="truncate text-xs font-bold">
-                      {project.name}
+                      {project.title}
                     </span>
                     <span
                       className={cn(
@@ -382,7 +386,11 @@ const SideBar = ({
                         mono.className,
                       )}
                     >
-                      {project.time} - {project.detail}
+                      {new Date().toLocaleDateString(undefined, {
+                        month: "short",
+                        day: "numeric",
+                      })}{" "}
+                      - {project.description}
                     </span>
                   </button>
                 ))}

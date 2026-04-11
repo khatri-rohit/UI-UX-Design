@@ -19,7 +19,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "LOGIC",
+  title: "LOGIC - AI-Powered UI/UX Builder",
   description:
     "LOGIC is an AI-powered UI/UX builder that transforms your ideas into stunning designs. With LOGIC, you can effortlessly create beautiful and functional user interfaces for web and mobile applications. Whether you're a designer, developer, or product manager, LOGIC empowers you to bring your vision to life with ease and efficiency.",
 };

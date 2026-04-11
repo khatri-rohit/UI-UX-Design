@@ -454,7 +454,7 @@ const Dashboard = () => {
                       mono.className,
                     )}
                   >
-                    Latency: 14ms
+                    Projects: 1
                   </span>
                 </div>
 

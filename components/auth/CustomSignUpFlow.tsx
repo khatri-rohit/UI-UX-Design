@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth, useSignUp } from "@clerk/nextjs";
 
+import { useCreateProjectMutation } from "@/lib/projects/queries";
 import { cn } from "@/lib/utils";
 
 type ClerkFieldError = { message?: string };
@@ -25,14 +26,6 @@ type PendingSessionTask = {
 type SessionWithTask = {
   currentTask?: PendingSessionTask | null;
 } | null;
-
-type CreateProjectResponse = {
-  error: boolean;
-  message?: string;
-  data?: {
-    projectId?: string;
-  } | null;
-};
 
 function getFieldError(
   errors: ClerkErrorPayload | undefined,
@@ -95,6 +88,7 @@ export default function CustomSignUpFlow() {
   const [statusMessage, setStatusMessage] = useState("");
   const [oauthLoadingProvider, setOauthLoadingProvider] =
     useState<OAuthProvider | null>(null);
+  const { mutateAsync: createProjectFromPrompt } = useCreateProjectMutation();
 
   const isLoading = fetchStatus === "fetching";
   const isAnyAuthFlowLoading = isLoading || oauthLoadingProvider !== null;
@@ -115,29 +109,6 @@ export default function CustomSignUpFlow() {
     () => getOAuthProviderFromParam(searchParams.get("provider")),
     [searchParams],
   );
-
-  const createProjectFromPrompt = async (
-    prompt: string,
-  ): Promise<string | null> => {
-    const response = await fetch("/api/projects", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ prompt }),
-    });
-
-    const payload = (await response.json()) as CreateProjectResponse;
-
-    if (!response.ok || payload.error) {
-      throw new Error(
-        payload.message ||
-          `Failed to create project: ${response.status} ${response.statusText}`,
-      );
-    }
-
-    return payload.data?.projectId ?? null;
-  };
 
   const startOAuthSignUp = async (provider: OAuthProvider) => {
     setStatusMessage("");
@@ -286,12 +257,12 @@ export default function CustomSignUpFlow() {
       return;
     }
 
-    void createProjectFromPrompt(initialPrompt)
-      .then((projectId) => {
+    void createProjectFromPrompt({ prompt: initialPrompt })
+      .then((project) => {
         sessionStorage.removeItem("initialPrompt");
 
-        if (projectId) {
-          router.replace(`/studio/${projectId}`);
+        if (project.projectId) {
+          router.replace(`/studio/${project.projectId}`);
           return;
         }
 
@@ -304,7 +275,7 @@ export default function CustomSignUpFlow() {
         );
         router.replace("/");
       });
-  }, [isSignedIn, router, signUp]);
+  }, [createProjectFromPrompt, isSignedIn, router, signUp]);
 
   if (!signUp) {
     return <div className="text-zinc-400 text-sm">Loading sign-up...</div>;
