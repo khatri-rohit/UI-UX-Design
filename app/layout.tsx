@@ -4,7 +4,7 @@ import "./globals.css";
 import { cn } from "@/lib/utils";
 import ClerkProviders from "@/providers/clerk";
 import QueryProvider from "@/providers/tankstack-query";
-import { ProjectsStoreProvider } from "@/providers/zustand-provider";
+import { UserActivityStoreProvider } from "@/providers/zustand-provider";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 
@@ -42,11 +42,11 @@ export default function RootLayout({
       )}
     >
       <body className="min-h-full flex flex-col">
-        <ProjectsStoreProvider>
+        <UserActivityStoreProvider>
           <QueryProvider>
             <ClerkProviders>{children}</ClerkProviders>
           </QueryProvider>
-        </ProjectsStoreProvider>
+        </UserActivityStoreProvider>
       </body>
     </html>
   );

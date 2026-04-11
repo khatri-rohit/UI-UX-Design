@@ -1,24 +1,21 @@
 /* eslint-disable react-hooks/exhaustive-deps */
+"use client";
+
 import React, {
   Dispatch,
   SetStateAction,
   useEffect,
+  useMemo,
   useRef,
-  useState,
 } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { cn } from "@/lib/utils";
-import {
-  HelpCircle,
-  CalendarDays,
-  FolderKanban,
-  History,
-  LucideIcon,
-  X,
-} from "lucide-react";
-import { JetBrains_Mono, Playwrite_BE_VLG } from "next/font/google";
+import { HelpCircle, CalendarDays, History, LucideIcon, X } from "lucide-react";
+import { JetBrains_Mono } from "next/font/google";
 import { Button } from "@/components/ui/button";
 import { useProjectsQuery } from "@/lib/projects/queries";
+import { useUserActivityStore } from "@/providers/zustand-provider";
+import { Timeframe } from "@/stores/user-activity";
 
 const mono = JetBrains_Mono({
   subsets: ["latin"],
@@ -28,39 +25,13 @@ const mono = JetBrains_Mono({
 const FOCUSABLE_SELECTOR =
   "a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex='-1'])";
 
-const navItems: Array<{ label: string; icon: LucideIcon }> = [
+const navItems: Array<{ label: Timeframe; icon: LucideIcon }> = [
   { label: "Recent", icon: History },
   { label: "Yesterday", icon: CalendarDays },
   { label: "Last 7 Days", icon: CalendarDays },
   { label: "Last 30 Days", icon: CalendarDays },
   // { label: "Examples", icon: FolderKanban },
 ];
-
-// const projectFeed: Array<{
-//   id: string;
-//   title: string;
-//   time: string;
-//   description: string;
-// }> = [
-//   {
-//     id: "1",
-//     title: "CORE_ENGINE_V1",
-//     time: "08:42",
-//     description: "Optimizing shader passes...",
-//   },
-//   {
-//     id: "2",
-//     title: "UI_SCAFFOLD_PROTOTYPE",
-//     time: "YEST",
-//     description: "Refactoring flexabox grid...",
-//   },
-//   {
-//     id: "3",
-//     title: "DATA_VIZ_EXPERIMENTAL",
-//     time: "12.04",
-//     description: "Canvas API implementation",
-//   },
-// ];
 
 interface SidebarProps {
   setIsMobileMenuOpen: Dispatch<SetStateAction<boolean>>;
@@ -73,12 +44,16 @@ const SideBar = ({
   setIsMobileMenuOpen,
   launcherButtonRef,
 }: SidebarProps) => {
+  const selectedTimeframe = useUserActivityStore(
+    (state) => state.selectedTimeframe,
+  );
+  const setSelectedTimeframe = useUserActivityStore(
+    (state) => state.setSelectedTimeframe,
+  );
+
   const shouldReduceMotion = useReducedMotion();
   const mobileDrawerRef = useRef<HTMLElement | null>(null);
 
-  const [activeNavItem, setActiveNavItem] = useState(
-    navItems[0]?.label ?? "Recent",
-  );
   const fadeLeft = (delay = 0) =>
     shouldReduceMotion
       ? {}
@@ -93,46 +68,46 @@ const SideBar = ({
         };
 
   const { data: projects = [] } = useProjectsQuery();
+  const filteredNavItems = useMemo(() => {
+    if (projects.length === 0) {
+      return [];
+    }
 
-  const filteredNavItems = projects.filter((item) => {
-    const yesterdayStart = new Date();
+    const now = Date.now();
+    const yesterdayStart = new Date(now);
     yesterdayStart.setDate(yesterdayStart.getDate() - 1);
     yesterdayStart.setHours(0, 0, 0, 0);
-    const yesterdayEnd = new Date();
+
+    const yesterdayEnd = new Date(now);
     yesterdayEnd.setDate(yesterdayEnd.getDate() - 1);
     yesterdayEnd.setHours(23, 59, 59, 999);
 
-    if (activeNavItem === "Recent") {
-      console.log(new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
-      return (
-        item.updatedAt >=
-        new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-      );
-    } else if (activeNavItem === "Yesterday") {
-      console.log(yesterdayStart.toISOString());
-      console.log(yesterdayEnd.toISOString());
-      return (
-        item.updatedAt >= yesterdayStart.toISOString() &&
-        item.updatedAt <= yesterdayEnd.toISOString()
-      );
-    } else if (activeNavItem === "Last 7 Days") {
-      console.log(yesterdayEnd.toISOString());
-      console.log(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString());
-      return (
-        item.updatedAt <= yesterdayEnd.toISOString() &&
-        item.updatedAt >=
-          new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
-      );
-    } else {
-      console.log(
-        new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-      );
-      return (
-        item.updatedAt >=
-        new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
-      );
-    }
-  });
+    const recentCutoff = new Date(now - 24 * 60 * 60 * 1000).toISOString();
+    const weekCutoff = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const monthCutoff = new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+    return projects.filter((item) => {
+      if (selectedTimeframe === "Recent") {
+        return item.updatedAt >= recentCutoff;
+      }
+
+      if (selectedTimeframe === "Yesterday") {
+        return (
+          item.updatedAt >= yesterdayStart.toISOString() &&
+          item.updatedAt <= yesterdayEnd.toISOString()
+        );
+      }
+
+      if (selectedTimeframe === "Last 7 Days") {
+        return (
+          item.updatedAt <= yesterdayEnd.toISOString() &&
+          item.updatedAt >= weekCutoff
+        );
+      }
+
+      return item.updatedAt >= monthCutoff;
+    });
+  }, [projects, selectedTimeframe]);
 
   useEffect(() => {
     if (!isMobileMenuOpen) {
@@ -220,13 +195,13 @@ const SideBar = ({
                   <motion.button
                     key={item.label}
                     type="button"
-                    onClick={() => setActiveNavItem(item.label)}
+                    onClick={() => setSelectedTimeframe(item.label)}
                     aria-current={
-                      activeNavItem === item.label ? "page" : undefined
+                      selectedTimeframe === item.label ? "page" : undefined
                     }
                     className={cn(
                       "flex items-center gap-3 px-4 py-2 text-left transition-colors duration-75",
-                      activeNavItem === item.label
+                      selectedTimeframe === item.label
                         ? "border-l-4 border-primary bg-primary text-primary-foreground"
                         : "text-muted-foreground hover:bg-muted hover:text-foreground",
                     )}
@@ -249,7 +224,7 @@ const SideBar = ({
           <div className="mt-8 flex flex-1 flex-col gap-4 px-4 max-w-64 min-w-64">
             {filteredNavItems.map((project, index) => (
               <motion.button
-                key={project.title}
+                key={project.id}
                 type="button"
                 className="logic-feed-item border border-border p-3 text-left transition-colors hover:border-muted-foreground"
                 {...fadeLeft(0.12 + index * 0.04)}
@@ -346,12 +321,12 @@ const SideBar = ({
                       key={`mobile-${item.label}`}
                       type="button"
                       onClick={() => {
-                        setActiveNavItem(item.label);
+                        setSelectedTimeframe(item.label);
                         setIsMobileMenuOpen(false);
                       }}
                       className={cn(
                         "flex items-center gap-3 px-3 py-2 text-left",
-                        activeNavItem === item.label
+                        selectedTimeframe === item.label
                           ? "bg-primary text-primary-foreground"
                           : "text-muted-foreground hover:bg-muted hover:text-foreground",
                       )}
@@ -371,7 +346,7 @@ const SideBar = ({
               </nav>
 
               <div className="border-t border-border px-3 py-4">
-                {projects.map((project) => (
+                {filteredNavItems.map((project) => (
                   <button
                     key={`mobile-feed-${project.id}`}
                     type="button"
@@ -394,6 +369,16 @@ const SideBar = ({
                     </span>
                   </button>
                 ))}
+                {filteredNavItems.length === 0 && (
+                  <div
+                    className={cn(
+                      "px-1 text-[11px] leading-4 text-muted-foreground",
+                      mono.className,
+                    )}
+                  >
+                    No projects found for the selected timeframe.
+                  </div>
+                )}
               </div>
             </motion.aside>
           </motion.div>
