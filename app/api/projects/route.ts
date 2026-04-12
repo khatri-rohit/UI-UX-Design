@@ -1,10 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import { generateText } from "ai";
 
 import prisma from "@/lib/prisma";
-import { initializeOllama } from "@/lib/ollama";
 import logger from "@/lib/logger";
 import { isAuthError, requireAuthContext } from "@/lib/get-auth";
+
+import { Client } from "@upstash/qstash";
+
+const client = new Client({
+  token: process.env.QSTASH_TOKEN,
+  retry: {
+    retries: 3,
+    backoff: (retry_count) => 2 ** retry_count * 20,
+  },
+});
 
 // This API route will handle project creation based on user prompts from the landing page.
 export async function POST(req: NextRequest) {
@@ -39,21 +47,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // const ollama = initializeOllama();
-    // const { text: projectTitle } = await generateText({
-    //   model: ollama("gemma4:31b-cloud"),
-    //   system:
-    //     "Generate exactly one concise, descriptive project title from the user's prompt. Return only the title text as a single line. Do not provide options, explanations, discussion, quotes, numbering, labels, or any extra text.",
-    //   prompt,
-    // });
-
-    // const { text: projectDescription } = await generateText({
-    //   model: ollama("gemma4:31b-cloud"),
-    //   system:
-    //     "You are a helpful assistant that generates a very short description for a design project based on the user's prompt. The description should be concise and descriptive.",
-    //   prompt,
-    // });
-
     const newProject = await prisma.project.create({
       data: {
         userId: authContext.appUserId,
@@ -64,7 +57,16 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // logger.info("Created new project from prompt", newProject);
+    // Schedule a background task to process the project's meta-data (title, description) using the initial prompt.
+    const result = await client.publishJSON({
+      url: `${process.env.BACKGROUND_TASK_QUEUE_PUBLIC_URL}/api/projects/${newProject.id}/meta-data`,
+      body: { projectId: newProject.id, prompt },
+    });
+
+    logger.info("Published project meta-data task to QStash", {
+      projectId: newProject.id,
+      qstashResult: result,
+    });
 
     return NextResponse.json(
       {
