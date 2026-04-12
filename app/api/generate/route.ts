@@ -16,13 +16,10 @@ import { isAuthError, requireAuthContext } from "@/lib/get-auth";
 
 export const runtime = "nodejs";
 
-const STAGE1_MODELS = ["deepseek-v3.2:cloud"];
-// const STAGE1_MODELS = ["gpt-oss:120b-cloud"];
-// const STAGE2_MODELS = ["gpt-oss:120b-cloud"];
+const STAGE1_MODELS = ["deepseek-v3.2:cloud", "gpt-oss:120b"];
 const STAGE2_MODELS = [
   "deepseek-v3.2:cloud",
   "gpt-oss:120b",
-  // "llama3.2-vision:11b",
   "deepseek-v3.1:671b",
 ];
 const STAGE3_MODELS = [
@@ -31,7 +28,6 @@ const STAGE3_MODELS = [
   "qwen3.5",
   "gpt-oss:120b",
   "deepseek-v3.2:cloud",
-  // "mistral:7b",
 ];
 
 function normalizePlatform(value: unknown): GenerationPlatform {

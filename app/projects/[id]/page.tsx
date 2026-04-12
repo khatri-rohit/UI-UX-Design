@@ -188,6 +188,12 @@ const components: TLComponents = {
 };
 
 const shapeUtils = [PhoneFrameShapeUtil]; // defined OUTSIDE component — never recreate in render
+type ProjectActionId =
+  | "all-projects"
+  | "share"
+  | "download"
+  | "edit"
+  | "delete";
 
 const StudioPage = () => {
   const { id: projectId } = useParams<{ id: string }>();
@@ -367,6 +373,7 @@ const StudioPage = () => {
         }
       }
     } catch (error) {
+      updateProjectStatus({ id: projectId, status: "ARCHIVED" });
       logger.error("Error generating layout:", error);
     } finally {
       setActiveStreamingScreen(null);
@@ -498,23 +505,24 @@ const StudioPage = () => {
     mountedEditor.updateInstanceState({ isGridMode: true });
   };
 
-  function handleMenuClick(action: string) {
+  function handleMenuClick(action: ProjectActionId) {
     switch (action) {
-      case "Go to all projects":
+      case "all-projects":
         router.push("/");
         break;
-      case "Share":
+      case "share":
         // Implement share functionality
         alert("Share functionality is not implemented yet.");
         break;
-      case "Download project":
+      case "download":
         // Implement download functionality
         alert("Download functionality is not implemented yet.");
-
-      case "Edit":
+        break;
+      case "edit":
         // Implement edit functionality
         alert("Edit functionality is not implemented yet.");
-      case "Delete project":
+        break;
+      case "delete":
         // Implement delete functionality
         const confirmed = confirm(
           "Are you sure you want to delete this project? This action cannot be undone.",
@@ -523,6 +531,10 @@ const StudioPage = () => {
           // Implement delete logic here
           deleteProject({ id: projectId });
         }
+        break;
+      default:
+        alert("Unknown action: " + action);
+        break;
     }
   }
 

@@ -370,9 +370,9 @@ const Dashboard = () => {
                     </SelectTrigger>
                     <SelectContent className="mt-10 min-w-35 border border-input bg-muted text-foreground">
                       <SelectGroup>
-                        <SelectItem value="gemma4:31b-cloud">gemma4</SelectItem>
+                        <SelectItem value="gemma4:31b">gemma4</SelectItem>
                         <SelectItem value="llama3.1:8b">llama3.1</SelectItem>
-                        <SelectItem value="deepseek-v3.1:671b-cloud">
+                        <SelectItem value="deepseek-v3.1:671b">
                           deepseek-v3.1
                         </SelectItem>
                       </SelectGroup>

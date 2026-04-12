@@ -8,20 +8,20 @@ export interface ApiResponse<T> {
 export type ProjectDetail = {
   id: string;
   title: string | null;
-  description: string | null;
+  // description: string | null;
   initialPrompt: string;
   status: "PENDING" | "GENERATING" | "ACTIVE" | "ARCHIVED";
-  canvasState: unknown;
-  thumbnailUrl: string | null;
-  generations: Array<{
-    id: string;
-    model: string;
-    spec: unknown;
-    screens: unknown;
-    createdAt: string;
-  }>;
-  createdAt: string;
-  updatedAt: string;
+  // canvasState: unknown;
+  // thumbnailUrl: string | null;
+  // generations: Array<{
+  //   id: string;
+  //   model: string;
+  //   spec: unknown;
+  //   screens: unknown;
+  //   createdAt: string;
+  // }>;
+  // createdAt: string;
+  // updatedAt: string;
 };
 
 export type ProjectSummary = {

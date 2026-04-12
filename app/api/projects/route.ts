@@ -27,8 +27,6 @@ export async function POST(req: NextRequest) {
 
     const body = (await req.json()) as { prompt?: unknown; platform?: unknown };
     const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
-    const platform =
-      typeof body.platform === "string" ? body.platform.trim() : "";
 
     if (!prompt) {
       return NextResponse.json(
@@ -41,7 +39,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const spec = getSpecForPrompt(prompt);
     // const ollama = initializeOllama();
     // const { text: projectTitle } = await generateText({
     //   model: ollama("gemma4:31b-cloud"),
@@ -80,14 +77,12 @@ export async function POST(req: NextRequest) {
       { status: 201 },
     );
   } catch (error) {
-    const err = error instanceof Error ? error : new Error(String(error));
     if (isAuthError(error)) {
       return NextResponse.json(
         {
           error: true,
           code: error.code,
           message: error.message,
-          details: err,
         },
         { status: error.status },
       );
@@ -102,30 +97,9 @@ export async function POST(req: NextRequest) {
         error: true,
         message: "An error occurred while creating the project.",
         data: null,
+        details: error,
       },
       { status: 500 },
     );
   }
-}
-
-function getSpecForPrompt(prompt: string) {
-  const lowerPrompt = prompt.toLowerCase();
-
-  if (
-    lowerPrompt.includes("web") ||
-    lowerPrompt.includes("website") ||
-    lowerPrompt.includes("web app")
-  ) {
-    return "web";
-  } else if (
-    lowerPrompt.includes("mobile") ||
-    lowerPrompt.includes("ios") ||
-    lowerPrompt.includes("iphone") ||
-    lowerPrompt.includes("android") ||
-    lowerPrompt.includes("app")
-  ) {
-    return "mobile";
-  }
-
-  return "web";
 }

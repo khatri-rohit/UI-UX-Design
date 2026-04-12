@@ -1,4 +1,4 @@
-import { requireAuthContext } from "@/lib/get-auth";
+import { isAuthError, requireAuthContext } from "@/lib/get-auth";
 import prisma from "@/lib/prisma";
 import { NextResponse, NextRequest } from "next/server";
 
@@ -64,13 +64,22 @@ export async function GET(
       { status: 200 },
     );
   } catch (error) {
-    const err = error instanceof Error ? error : new Error(String(error));
+    if (isAuthError(error)) {
+      return NextResponse.json(
+        {
+          error: true,
+          code: error.code,
+          message: error.message,
+        },
+        { status: error.status },
+      );
+    }
     return NextResponse.json(
       {
         error: true,
         message: "An error occurred while fetching the project",
         data: null,
-        details: err,
+        details: error,
       },
       { status: 500 },
     );
@@ -151,13 +160,22 @@ export async function PATCH(
       { status: 200 },
     );
   } catch (error) {
-    const err = error instanceof Error ? error : new Error(String(error));
+    if (isAuthError(error)) {
+      return NextResponse.json(
+        {
+          error: true,
+          code: error.code,
+          message: error.message,
+        },
+        { status: error.status },
+      );
+    }
     return NextResponse.json(
       {
         error: true,
         message: "An error occurred while updating the project status",
         data: null,
-        details: err,
+        details: error,
       },
       { status: 500 },
     );
@@ -226,13 +244,22 @@ export async function DELETE(
       { status: 200 },
     );
   } catch (error) {
-    const err = error instanceof Error ? error : new Error(String(error));
+    if (isAuthError(error)) {
+      return NextResponse.json(
+        {
+          error: true,
+          code: error.code,
+          message: error.message,
+        },
+        { status: error.status },
+      );
+    }
     return NextResponse.json(
       {
         error: true,
         message: "An error occurred while deleting the project",
         data: null,
-        details: err,
+        details: error,
       },
       { status: 500 },
     );

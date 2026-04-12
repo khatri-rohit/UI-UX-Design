@@ -18,25 +18,33 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { useRouter } from "next/navigation";
 
-const projectActions = [
-  { label: "Go to all projects", icon: ChevronLeft },
-  { label: "Share", icon: Share2 },
-  { label: "Download project", icon: Download },
-  //   { label: "Duplicate project", icon: SquareStack },
-  { label: "Edit", icon: Pencil },
-  //   { label: "Help", icon: HelpCircle },
-  //   { label: "Appearance", icon: Monitor },
-  //   { label: "Settings", icon: Settings2 },
-  { label: "Delete project", icon: Trash2 },
-  //   { label: "Command menu", icon: Command, meta: "Ctrl+K" },
-  //   { label: "Send feedback", icon: ExternalLink },
-];
+type ProjectActionId =
+  | "all-projects"
+  | "share"
+  | "download"
+  | "edit"
+  | "delete";
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const projectActions: Array<{ id: ProjectActionId; label: string; icon: any }> =
+  [
+    { id: "all-projects", label: "Go to all projects", icon: ChevronLeft },
+    { id: "share", label: "Share", icon: Share2 },
+    { id: "download", label: "Download project", icon: Download },
+    { id: "edit", label: "Edit", icon: Pencil },
+    { id: "delete", label: "Delete project", icon: Trash2 },
+    //   { id: "duplicate", label: "Duplicate project", icon: SquareStack },
+    //   { id: "help", label: "Help", icon: HelpCircle },
+    //   { id: "appearance", label: "Appearance", icon: Monitor },
+    //   { id: "settings", label: "Settings", icon: Settings2 },
+    //   { id: "command-menu", label: "Command menu", icon: Command, meta: "Ctrl+K" },
+    //   { id: "send-feedback", label: "Send feedback", icon: ExternalLink },
+  ];
 
 interface ProjectMenuPanelProps {
   title: string;
-  handleMenuClick: (action: string) => void;
+  handleMenuClick: (action: ProjectActionId) => void;
 }
 
 export default function ProjectMenuPanel({
@@ -72,13 +80,13 @@ export default function ProjectMenuPanel({
               const Icon = item.icon;
 
               return (
-                <React.Fragment key={item.label}>
+                <React.Fragment key={item.id}>
                   <DropdownMenuItem
                     className={cn(
                       "flex cursor-pointer items-center rounded-none gap-3 px-3 py-3 text-[15px] text-white/90 outline-none transition-colors",
                       "focus:bg-white/80 focus:text-black",
                     )}
-                    onClick={() => handleMenuClick(item.label)}
+                    onClick={() => handleMenuClick(item.id)}
                   >
                     <Icon className="h-4 w-4 shrink-0" />
                     <span className="flex-1">{item.label}</span>
