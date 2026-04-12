@@ -6,18 +6,12 @@ import {
 } from "@tanstack/react-query";
 
 import { ApiError, requestApi } from "@/lib/api/http";
-
-export type ProjectSummary = {
-  id: string;
-  title: string;
-  description: string | null;
-  thumbnailUrl: string | null;
-  updatedAt: string;
-};
+import { ProjectDetail, ProjectSummary } from "../api/types";
 
 type CreateProjectInput = {
   prompt: string;
   platform: "web" | "mobile";
+  model: string;
 };
 
 type CreateProjectResult = {
@@ -25,6 +19,7 @@ type CreateProjectResult = {
   title: string;
   description: string | null;
   spec: "web" | "mobile";
+  model: string;
   updatedAt: string;
 };
 
@@ -38,12 +33,12 @@ async function listProjects() {
   return requestApi<ProjectSummary[]>("/api/projects/all");
 }
 
-async function createProject({ prompt, platform }: CreateProjectInput) {
+async function createProject({ prompt, platform, model }: CreateProjectInput) {
   const normalizedPrompt = prompt.trim();
 
-  if (!normalizedPrompt || !platform) {
+  if (!normalizedPrompt || !platform || !model) {
     throw new ApiError(
-      "Prompt and platform are required.",
+      "Prompt, platform, and model are required.",
       400,
       "INVALID_PROMPT",
     );
@@ -54,7 +49,7 @@ async function createProject({ prompt, platform }: CreateProjectInput) {
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ prompt: normalizedPrompt, platform }),
+    body: JSON.stringify({ prompt: normalizedPrompt, platform, model }),
   });
 }
 
@@ -75,36 +70,112 @@ export function useCreateProjectMutation() {
 
   return useMutation({
     mutationFn: createProject,
-    // onSuccess: async (createdProject) => {
-    //   queryClient.setQueryData<ProjectSummary[]>(
-    //     projectKeys.list(),
-    //     (currentProjects) => {
-    //       if (!currentProjects) {
-    //         return currentProjects;
-    //       }
+    onSuccess: async (createdProject) => {
+      // queryClient.setQueryData<ProjectSummary[]>(
+      //   projectKeys.list(),
+      //   (currentProjects) => {
+      //     if (!currentProjects) {
+      //       return currentProjects;
+      //     }
 
-    //       if (
-    //         currentProjects.some(
-    //           (project) => project.id === createdProject.projectId,
-    //         )
-    //       ) {
-    //         return currentProjects;
-    //       }
+      //     if (
+      //       currentProjects.some(
+      //         (project) => project.id === createdProject.projectId,
+      //       )
+      //     ) {
+      //       return currentProjects;
+      //     }
 
-    //       return [
-    //         {
-    //           id: createdProject.projectId,
-    //           title: createdProject.title,
-    //           description: createdProject.description,
-    //           thumbnailUrl: null,
-    //           updatedAt: createdProject.updatedAt,
-    //         },
-    //         ...currentProjects,
-    //       ];
-    //     },
-    //   );
+      //     return [
+      //       {
+      //         id: createdProject.projectId,
+      //         title: createdProject.title,
+      //         description: createdProject.description,
+      //         thumbnailUrl: null,
+      //         updatedAt: createdProject.updatedAt,
+      //       },
+      //       ...currentProjects,
+      //     ];
+      //   },
+      // );
 
-    //   await queryClient.invalidateQueries({ queryKey: projectKeys.all });
-    // },
+      await queryClient.invalidateQueries({ queryKey: projectKeys.all });
+    },
+  });
+}
+
+async function getProject(id: string): Promise<ProjectDetail> {
+  return requestApi<ProjectDetail>(`/api/projects/${id}`);
+}
+
+export function projectDetailQueryOptions(id: string) {
+  return queryOptions({
+    queryKey: ["projects", id] as const,
+    queryFn: () => getProject(id),
+    enabled: !!id,
+    staleTime: 30 * 1000,
+  });
+}
+
+export function useProjectQuery(id: string) {
+  return useQuery(projectDetailQueryOptions(id));
+}
+
+// -- Mutations for project delete
+export async function deleteProject(id: string) {
+  return requestApi(`/api/projects/${id}`, {
+    method: "DELETE",
+  });
+}
+
+export function useProjectDeleteMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: deleteProject,
+    onSuccess: (_, id) => {
+      // Remove from list cache
+      queryClient.setQueryData<ProjectSummary[]>(projectKeys.list(), (prev) =>
+        prev?.filter((p) => p.id !== id),
+      );
+      // Invalidate detail
+      queryClient.removeQueries({ queryKey: ["projects", id] });
+    },
+  });
+}
+
+// -- Mutations for project status update
+export async function updateProjectStatus(
+  id: string,
+  status: "PENDING" | "GENERATING" | "ACTIVE" | "ARCHIVED",
+) {
+  return requestApi<{ status: ProjectDetail["status"] }>(
+    `/api/projects/${id}`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ status }),
+    },
+  );
+}
+
+export function useProjectStatusUpdateMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      id,
+      status,
+    }: {
+      id: string;
+      status: ProjectDetail["status"];
+    }) => updateProjectStatus(id, status),
+    onSuccess: (data: { status: ProjectDetail["status"] }, { id }) => {
+      queryClient.setQueryData<ProjectDetail>(["projects", id], (prev) =>
+        prev ? { ...prev, status: data.status } : prev,
+      );
+    },
   });
 }

@@ -1,9 +1,7 @@
-/* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import { Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
 import { JetBrains_Mono } from "next/font/google";
 import {
   createShapeId,
@@ -41,13 +39,19 @@ import {
 import SelectModel from "@/components/SelectModel";
 import { cn } from "@/lib/utils";
 import ProjectMenuPanel from "@/components/projects/TopMenu";
-
-const STUDIO_PROMPT_STORAGE_KEY = "uiuxbuilder:studioPrompt";
+import { useParams } from "next/navigation";
+import {
+  useProjectQuery,
+  useProjectStatusUpdateMutation,
+} from "@/lib/projects/queries";
+import { useUserActivityStore } from "@/providers/zustand-provider";
 
 const DASHBOARD_MODEL_ALIASES: string[] = [
-  "gemma4:31b-cloud",
-  "gpt-oss:120b-cloud",
-  "deepseek-v3.1:671b-cloud",
+  "gemma4:31b",
+  "gpt-oss:120b",
+  "deepseek-v3.1:671b",
+  "qwen3.5",
+  "deepseek-v3.2:cloud",
 ];
 
 const mono = JetBrains_Mono({
@@ -176,6 +180,22 @@ const components: TLComponents = {
 const shapeUtils = [PhoneFrameShapeUtil]; // defined OUTSIDE component — never recreate in render
 
 const StudioPage = () => {
+  const { id: projectId } = useParams<{ id: string }>();
+
+  const {
+    data: project,
+    isLoading: projectLoading,
+    isError,
+    error,
+  } = useProjectQuery(projectId);
+
+  const {} = useProjectStatusUpdateMutation();
+
+  const model = useUserActivityStore((state) => state.model);
+  const setModel = useUserActivityStore((state) => state.setModel);
+  const spec = useUserActivityStore((state) => state.spec);
+  const setSpec = useUserActivityStore((state) => state.setSpec);
+
   const editorRef = useRef<Editor | null>(null);
   const shapeIdRef = useRef<ReturnType<typeof createShapeId> | null>(null);
   const screenBuffersRef = useRef<Map<string, string>>(new Map());
@@ -186,26 +206,19 @@ const StudioPage = () => {
   const [activeStreamingScreen, setActiveStreamingScreen] = useState<
     string | null
   >(null);
-  const [selectedPlatform, setSelectedPlatform] =
-    useState<GenerationPlatform>("web");
 
-  const [model, setModel] = useState<string>(DASHBOARD_MODEL_ALIASES[0]);
   const canGenerate = !!prompt.trim() && !isGenerating;
-
   const models = [...DASHBOARD_MODEL_ALIASES];
 
   const handleGenerate = async () => {
-    if (!prompt.trim()) return;
+    if (!project) {
+      logger.error("Project not found");
+      return;
+    }
 
     setIsGenerating(true);
     setActiveStreamingScreen(null);
     try {
-      logger.info(
-        "Initiating generation with prompt:",
-        prompt,
-        "and model:",
-        model,
-      );
       if (!editorRef.current) throw new Error("Editor not initialized");
 
       // 2. On each token — accumulate and update the shape
@@ -219,14 +232,12 @@ const StudioPage = () => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model,
-          prompt: prompt,
-          platform: selectedPlatform,
+          model: model,
+          prompt: project.status === "PENDING" ? project.initialPrompt : prompt,
+          platform: spec ?? "web",
         }),
       });
 
-      sessionStorage.removeItem(STUDIO_PROMPT_STORAGE_KEY); // Clear stored prompt on new generation attempt
-      sessionStorage.removeItem("uiuxbuilder:selectedModel"); // Clear stored model selection
       setPrompt("");
 
       logger.info("Generation request sent. Awaiting response...");
@@ -267,7 +278,6 @@ const StudioPage = () => {
     }
   };
 
-  // 2. handleEvent — screen_done triggers compile
   function handleEvent(event: any) {
     const editor = editorRef.current;
     if (!editor) return;
@@ -379,50 +389,24 @@ const StudioPage = () => {
   }
 
   const handleMount = (mountedEditor: Editor) => {
-    if (!mountedEditor) return;
     editorRef.current = mountedEditor; // always current, never stale
     mountedEditor.updateInstanceState({ isGridMode: true });
+    handleGenerate();
   };
 
   useEffect(() => {
-    if (!editorRef.current) return;
-    if (typeof window !== "undefined") {
-      const storedPrompt = sessionStorage.getItem(STUDIO_PROMPT_STORAGE_KEY);
-      if (storedPrompt && storedPrompt.trim().length !== 0) {
-        setModel(
-          sessionStorage.getItem("uiuxbuilder:selectedModel") ??
-            DASHBOARD_MODEL_ALIASES[0],
-        );
-        setPrompt(storedPrompt);
-        handleGenerate();
-      }
+    if (projectLoading || isError) return;
+    logger.info("Project info:", project);
+    logger.info("Project error:", error);
+    if (!project) {
+      logger.error("Project not found");
+      return;
     }
-  }, [editorRef.current, handleMount]); // run once on mount, and whenever the stored prompt changes (e.g., from another tab)
-
-  // useLayoutEffect(() => {
-  //   handleMount(editorRef.current!);
-  //   if (editorRef.current) {
-  //     if (typeof window !== "undefined") {
-  //       const storedPrompt = sessionStorage.getItem(STUDIO_PROMPT_STORAGE_KEY);
-  //       if (storedPrompt && storedPrompt.trim().length !== 0) {
-  //         setModel(
-  //           sessionStorage.getItem("uiuxbuilder:selectedModel") ??
-  //             DASHBOARD_MODEL_ALIASES[0],
-  //         );
-  //         setPrompt(storedPrompt);
-  //         handleGenerate();
-
-  //         sessionStorage.removeItem(STUDIO_PROMPT_STORAGE_KEY); // Clear stored prompt on new generation attempt
-  //         sessionStorage.removeItem("uiuxbuilder:selectedModel"); // Clear stored model selection
-  //       }
-  //     }
-  //   }
-  //   return () => {
-  //     if (editorRef.current) {
-  //       editorRef.current.updateInstanceState({ isGridMode: false });
-  //     }
-  //   };
-  // }, [editorRef.current]); // ensure editor is ready before any updates
+    if (project.status === "PENDING") {
+      handleGenerate();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project, projectLoading, isError]);
 
   return (
     <div
@@ -463,11 +447,11 @@ const StudioPage = () => {
               <Button
                 type="button"
                 size="xs"
-                variant={selectedPlatform === "web" ? "secondary" : "ghost"}
-                onClick={() => setSelectedPlatform("web")}
+                variant={spec === "web" ? "secondary" : "ghost"}
+                onClick={() => setSpec("web")}
                 className={cn(
                   "h-7 px-2",
-                  selectedPlatform === "mobile" && "text-muted-foreground",
+                  spec === "mobile" && "text-muted-foreground",
                 )}
               >
                 <Monitor data-icon="inline-start" className="size-4" />
@@ -483,11 +467,11 @@ const StudioPage = () => {
               <Button
                 type="button"
                 size="xs"
-                variant={selectedPlatform === "mobile" ? "secondary" : "ghost"}
-                onClick={() => setSelectedPlatform("mobile")}
+                variant={spec === "mobile" ? "secondary" : "ghost"}
+                onClick={() => setSpec("mobile")}
                 className={cn(
                   "h-7 px-2",
-                  selectedPlatform === "web" && "text-muted-foreground",
+                  spec === "web" && "text-muted-foreground",
                 )}
               >
                 <Smartphone data-icon="inline-start" className="size-4" />
@@ -548,7 +532,7 @@ const StudioPage = () => {
             />
 
             <Button
-              onClick={handleGenerate}
+              onClick={() => handleGenerate()}
               disabled={!canGenerate}
               className="h-11 rounded-md px-4"
             >

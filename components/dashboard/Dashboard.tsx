@@ -37,8 +37,6 @@ import SideBar from "./SideBar";
 import { useUserActivityStore } from "@/providers/zustand-provider";
 import { useCreateProjectMutation } from "@/lib/projects/queries";
 
-const STUDIO_PROMPT_STORAGE_KEY = "uiuxbuilder:studioPrompt";
-
 const mono = JetBrains_Mono({
   subsets: ["latin"],
   weight: ["400", "700"],
@@ -80,6 +78,8 @@ const quickActions: Array<{
 const Dashboard = () => {
   const spec = useUserActivityStore((state) => state.spec);
   const setSpec = useUserActivityStore((state) => state.setSpec);
+  const selectedModel = useUserActivityStore((state) => state.model);
+  const setSelectedModel = useUserActivityStore((state) => state.setModel);
 
   const { mutate, status, data } = useCreateProjectMutation();
   const router = useRouter();
@@ -88,7 +88,6 @@ const Dashboard = () => {
 
   const [error, setError] = useState<string | null>(null);
   const [command, setCommand] = useState("");
-  const [selectedModel, setSelectedModel] = useState("gemma4:31b-cloud");
 
   const commandInputRef = useRef<HTMLInputElement | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -139,9 +138,11 @@ const Dashboard = () => {
     }
 
     try {
-      mutate({ prompt: normalizedPrompt, platform: spec });
-      sessionStorage.setItem(STUDIO_PROMPT_STORAGE_KEY, normalizedPrompt);
-      sessionStorage.setItem("uiuxbuilder:selectedModel", selectedModel);
+      mutate({
+        prompt: normalizedPrompt,
+        platform: spec,
+        model: selectedModel,
+      });
     } catch {
       // Ignore storage failures; studio still has URL fallbacks for minimal state.
       setError(
