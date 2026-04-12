@@ -1,7 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import * as htmlToImage from 'html-to-image';
 import { JetBrains_Mono } from "next/font/google";
 import {
   createShapeId,
@@ -39,8 +40,9 @@ import {
 import SelectModel from "@/components/SelectModel";
 import { cn } from "@/lib/utils";
 import ProjectMenuPanel from "@/components/projects/TopMenu";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import {
+  useProjectDeleteMutation,
   useProjectQuery,
   useProjectStatusUpdateMutation,
 } from "@/lib/projects/queries";
@@ -181,15 +183,22 @@ const shapeUtils = [PhoneFrameShapeUtil]; // defined OUTSIDE component — never
 
 const StudioPage = () => {
   const { id: projectId } = useParams<{ id: string }>();
+  const router = useRouter();
 
   const {
     data: project,
     isLoading: projectLoading,
     isError,
-    error,
+    error: projectError,
   } = useProjectQuery(projectId);
 
-  const {} = useProjectStatusUpdateMutation();
+  const { mutate: updateProjectStatus } = useProjectStatusUpdateMutation();
+  const {
+    mutate: deleteProject,
+    data: deleteProjectData,
+    error: deleteError,
+    isSuccess: isDeleteSuccess,
+  } = useProjectDeleteMutation();
 
   const model = useUserActivityStore((state) => state.model);
   const setModel = useUserActivityStore((state) => state.setModel);
@@ -200,6 +209,7 @@ const StudioPage = () => {
   const shapeIdRef = useRef<ReturnType<typeof createShapeId> | null>(null);
   const screenBuffersRef = useRef<Map<string, string>>(new Map());
   const frameIdsRef = useRef<Map<string, TLShapeId>>(new Map());
+  const domRef = useRef(null);
 
   const [prompt, setPrompt] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
@@ -224,7 +234,6 @@ const StudioPage = () => {
       // 2. On each token — accumulate and update the shape
       shapeIdRef.current = null;
       screenBuffersRef.current = new Map();
-      logger.info("Sending generation request with prompt:", prompt);
 
       const response = await fetch("/api/generate", {
         method: "POST",
@@ -248,6 +257,8 @@ const StudioPage = () => {
         logger.error("Error response: ", errorData);
         throw new Error(errorData.message || "Generation failed");
       }
+
+      updateProjectStatus({ id: projectId, status: "GENERATING" });
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
@@ -329,6 +340,7 @@ const StudioPage = () => {
         });
     } else if (event.type === "screen_reset") {
       const id = frameIdsRef.current.get(event.screen);
+
       if (!id) return;
       screenBuffersRef.current.set(event.screen, "");
       setActiveStreamingScreen(event.screen);
@@ -359,8 +371,6 @@ const StudioPage = () => {
     if (event.type === "screen_done") {
       const id = frameIdsRef.current.get(event.screen);
       if (!id) return;
-
-      // Pass the full code and flip to done
       // The shape's useEffect watches these props and mounts Sandpack
       editor.updateShape({
         id,
@@ -379,11 +389,13 @@ const StudioPage = () => {
 
     if (event.type === "done") {
       setActiveStreamingScreen(null);
+      updateProjectStatus({ id: projectId, status: "ACTIVE" });
       const newIds = [...frameIdsRef.current.values()];
       if (newIds.length > 0) {
         editor.select(...newIds);
         editor.zoomToSelection({ animation: { duration: 600 } });
         editor.selectNone();
+        // TODO: capture thumbnail here after a brief delay to allow for rendering
       }
     }
   }
@@ -393,10 +405,48 @@ const StudioPage = () => {
     mountedEditor.updateInstanceState({ isGridMode: true });
   };
 
+  function handleMenuClick(action: string) {
+    switch (action) {
+      case "Go to all projects":
+        router.push("/");
+        break;
+      case "Share":
+        // Implement share functionality
+        alert("Share functionality is not implemented yet.");
+        break;
+      case "Download project":
+        // Implement download functionality
+        alert("Download functionality is not implemented yet.");
+
+      case "Edit":
+        // Implement edit functionality
+        alert("Edit functionality is not implemented yet.");
+      case "Delete project":
+        // Implement delete functionality
+        const confirmed = confirm(
+          "Are you sure you want to delete this project? This action cannot be undone.",
+        );
+        if (confirmed) {
+          // Implement delete logic here
+          deleteProject({ id: projectId });
+        }
+    }
+  }
+  
+ const onCapture = useCallback(() => {
+    if (domRef.current === null) return;
+
+    htmlToImage.toPng(domRef.current)
+      .then((dataUrl) => {
+       const blob = 
+      })
+      .catch((err) => console.error(err));
+  }, [domRef]);
+
   useEffect(() => {
     if (projectLoading || isError) return;
     logger.info("Project info:", project);
-    logger.info("Project error:", error);
+    logger.warn("Project error:", projectError);
     if (!project) {
       logger.error("Project not found");
       return;
@@ -406,6 +456,13 @@ const StudioPage = () => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project, projectLoading, isError]);
+
+  useEffect(() => {
+    if (deleteProjectData?.error === false) {
+      logger.info("Project deleted successfully:", deleteProjectData);
+      router.push("/");
+    }
+  }, [deleteProjectData, deleteError, router, isDeleteSuccess]);
 
   return (
     <div
@@ -436,7 +493,10 @@ const StudioPage = () => {
         />
       </div>
 
-      <ProjectMenuPanel />
+      <ProjectMenuPanel
+        title={project?.title || "Untitled Project"}
+        handleMenuClick={handleMenuClick}
+      />
 
       {/* Prompt Input */}
       <div className="pointer-events-none absolute inset-0 z-50">

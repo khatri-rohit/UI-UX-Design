@@ -219,7 +219,9 @@ export async function DELETE(
       {
         error: false,
         message: "Project deleted successfully",
-        data: null,
+        data: {
+          error: false,
+        },
       },
       { status: 200 },
     );
