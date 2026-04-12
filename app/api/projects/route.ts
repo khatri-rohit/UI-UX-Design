@@ -57,16 +57,28 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // Schedule a background task to process the project's meta-data (title, description) using the initial prompt.
-    const result = await client.publishJSON({
-      url: `${process.env.BACKGROUND_TASK_QUEUE_PUBLIC_URL}/api/projects/${newProject.id}/meta-data`,
-      body: { projectId: newProject.id, prompt },
-    });
+    try {
+      const queueBaseUrl = process.env.BACKGROUND_TASK_QUEUE_PUBLIC_URL;
+      if (!queueBaseUrl)
+        throw new Error("Missing BACKGROUND_TASK_QUEUE_PUBLIC_URL");
 
-    logger.info("Published project meta-data task to QStash", {
-      projectId: newProject.id,
-      qstashResult: result,
-    });
+      const result = await client.publishJSON({
+        url: `${queueBaseUrl}/api/projects/${newProject.id}/meta-data`,
+        body: { projectId: newProject.id, prompt },
+      });
+
+      logger.info("Published project meta-data task to QStash", {
+        projectId: newProject.id,
+        qstashResult: result,
+      });
+    } catch (queueError) {
+      logger.error("Project created but failed to enqueue meta-data task", {
+        projectId: newProject.id,
+        error:
+          queueError instanceof Error ? queueError.message : String(queueError),
+      });
+      // Do not fail creation after successful DB write.
+    }
 
     return NextResponse.json(
       {

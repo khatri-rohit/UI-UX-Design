@@ -9,6 +9,17 @@ export const POST = verifySignatureAppRouter(async (req: Request) => {
   const body = await req.json();
   const { projectId, prompt } = body as { projectId: string; prompt: string };
 
+  const pathname = new URL(req.url).pathname;
+
+  const routeProjectId = pathname.split("/")[3] ?? "";
+  if (!routeProjectId) {
+    return new Response("Invalid project route", { status: 400 });
+  }
+
+  if (projectId && projectId !== routeProjectId) {
+    return new Response("Route/body projectId mismatch", { status: 400 });
+  }
+
   // Project meta-data processing logic
   const ollama = initializeOllama();
   const { text: projectTitle } = await generateText({
@@ -24,6 +35,7 @@ export const POST = verifySignatureAppRouter(async (req: Request) => {
       "You are a helpful assistant that generates a very short description for a design project based on the user's prompt. The description should be concise and descriptive.",
     prompt,
   });
+
   logger.info("Generated project meta-data from prompt", {
     projectId,
     projectTitle,
@@ -38,11 +50,6 @@ export const POST = verifySignatureAppRouter(async (req: Request) => {
   });
 
   return new Response(
-    "Background meta-data processing completed for project " +
-      projectId +
-      ". Title: " +
-      projectTitle +
-      ", Description: " +
-      projectDescription,
+    "Background meta-data processing completed for project " + projectId,
   );
 });

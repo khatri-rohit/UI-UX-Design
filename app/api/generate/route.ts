@@ -181,21 +181,29 @@ export async function POST(req: NextRequest) {
         { status: 401 },
       );
     }
+    try {
+      const { success, limit, remaining, reset } =
+        await generationRatelimit.limit(authContext.appUserId);
 
-    const { success, limit, remaining, reset } =
-      await generationRatelimit.limit(authContext.appUserId);
-    if (!success) {
-      return NextResponse.json(
-        { error: true, message: "Rate limit exceeded" },
-        {
-          status: 429,
-          headers: {
-            "X-RateLimit-Limit": limit.toString(),
-            "X-RateLimit-Remaining": remaining.toString(),
-            "X-RateLimit-Reset": reset.toString(),
+      if (!success) {
+        return NextResponse.json(
+          { error: true, message: "Rate limit exceeded" },
+          {
+            status: 429,
+            headers: {
+              "X-RateLimit-Limit": limit.toString(),
+              "X-RateLimit-Remaining": remaining.toString(),
+              "X-RateLimit-Reset": reset.toString(),
+            },
           },
-        },
+        );
+      }
+    } catch (rateLimitError) {
+      logger.error(
+        `generationRatelimit.limit failed for authContext.appUserId=${authContext.appUserId}`,
+        rateLimitError,
       );
+      // Fail open: continue without rate-limit enforcement.
     }
 
     const {
