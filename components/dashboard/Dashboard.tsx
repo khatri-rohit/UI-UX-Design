@@ -42,7 +42,7 @@ const mono = JetBrains_Mono({
   weight: ["400", "700"],
 });
 
-const titleWords = ["Welcome", "to", "Stitch."];
+const titleWords = ["Welcome", "to", "LOGIC."];
 
 type DashboardPlatform = "web" | "mobile";
 
