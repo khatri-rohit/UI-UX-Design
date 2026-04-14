@@ -28,8 +28,9 @@ export function useFrameLifecycle({
   const destroyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const mount = useCallback(async () => {
-    if (isMountedRef.current || !iframeRef.current || !content) return;
-
+    console.log(content);
+    console.log(iframeRef.current);
+    if (!iframeRef.current || !content) return;
     const client = await loadSandpackClient(
       iframeRef.current,
       {

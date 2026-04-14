@@ -36,7 +36,11 @@ import { useUserActivityStore } from "@/providers/zustand-provider";
 import { Monitor, Smartphone, Sparkles } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 
-import { CanvasSnapshotV1, isCanvasSnapshotV1 } from "@/lib/canvas-state";
+import {
+  CanvasSnapshotV1,
+  FrameState,
+  isCanvasSnapshotV1,
+} from "@/lib/canvas-state";
 import {
   getGenerationLayout,
   getInitialDimensionsForPlatform,
@@ -68,6 +72,14 @@ type GenerationEvent =
   | { type: "error"; message: string }
   | { type: "design_context"; designContext: unknown }
   | { type: "tree"; tree: unknown };
+
+type GenerationReviewEntry = {
+  screenName: string;
+  generationId: string;
+  state: FrameState;
+  error: string | null;
+  code: string;
+};
 
 type ProjectActionId =
   | "all-projects"
@@ -121,10 +133,17 @@ const StudioPage = () => {
   const canvasRef = useRef<InfiniteCanvasHandle | null>(null);
   const domRef = useRef<HTMLDivElement | null>(null);
 
-  const frameIdsRef = useRef<Map<string, string>>(new Map());
+  const frameIdsRef = useRef<Map<string, string[]>>(new Map());
+  const activeFrameIdsRef = useRef<Map<string, string>>(new Map());
   const screenBuffersRef = useRef<Map<string, string>>(new Map());
   const dirtyScreensRef = useRef<Set<string>>(new Set());
   const framesRef = useRef<Map<string, CanvasFrameData>>(new Map());
+  const generationRunIdRef = useRef<string | null>(null);
+  const activeGenerationIdRef = useRef<string | null>(null);
+  const generationReviewRef = useRef<Map<string, GenerationReviewEntry>>(
+    new Map(),
+  );
+  const generationLogEmittedRef = useRef(false);
 
   const chunkFlushIntervalRef = useRef<ReturnType<typeof setInterval> | null>(
     null,
@@ -212,6 +231,124 @@ const StudioPage = () => {
     }, 450);
   }, [buildSnapshot, persistCanvasState, projectId]);
 
+  const resolveFrameIdForScreen = useCallback((screenName: string) => {
+    const activeFrameId = activeFrameIdsRef.current.get(screenName);
+    if (activeFrameId) return activeFrameId;
+
+    const frameIds = frameIdsRef.current.get(screenName);
+    if (!frameIds || frameIds.length === 0) return null;
+
+    for (const frameId of frameIds) {
+      const frame = framesRef.current.get(frameId);
+      if (!frame) continue;
+      if (frame.state !== "done" && frame.state !== "error") {
+        return frameId;
+      }
+    }
+
+    return null;
+  }, []);
+
+  const claimFrameIdForScreen = useCallback(
+    (screenName: string) => {
+      const existingActiveFrameId = activeFrameIdsRef.current.get(screenName);
+      if (existingActiveFrameId) {
+        return existingActiveFrameId;
+      }
+
+      const frameId = resolveFrameIdForScreen(screenName);
+      if (!frameId) return null;
+
+      activeFrameIdsRef.current.set(screenName, frameId);
+      return frameId;
+    },
+    [resolveFrameIdForScreen],
+  );
+
+  const upsertGenerationReviewEntry = useCallback(
+    ({
+      frameId,
+      screenName,
+      generationId,
+      state,
+      error,
+      code,
+    }: {
+      frameId: string;
+      screenName: string;
+      generationId: string;
+      state: FrameState;
+      error: string | null;
+      code: string;
+    }) => {
+      generationReviewRef.current.set(frameId, {
+        screenName,
+        generationId,
+        state,
+        error,
+        code,
+      });
+    },
+    [],
+  );
+
+  const emitGenerationReviewLog = useCallback(
+    (reason: string) => {
+      if (generationLogEmittedRef.current) return;
+
+      const runId = generationRunIdRef.current;
+      if (!runId) return;
+
+      const activeGenerationId = activeGenerationIdRef.current;
+      let entries = [...generationReviewRef.current.entries()]
+        .map(([frameId, entry]) => ({ frameId, ...entry }))
+        .filter((entry) =>
+          activeGenerationId ? entry.generationId === activeGenerationId : true,
+        );
+
+      if (entries.length === 0 && activeGenerationId) {
+        entries = [...framesRef.current.values()]
+          .filter((frame) => frame.generationId === activeGenerationId)
+          .map((frame) => ({
+            frameId: frame.id,
+            screenName: frame.screenName,
+            generationId: frame.generationId,
+            state: frame.state,
+            error: frame.error,
+            code: frame.content,
+          }));
+      }
+
+      if (entries.length === 0) return;
+
+      generationLogEmittedRef.current = true;
+
+      entries.sort((a, b) => {
+        if (a.screenName !== b.screenName) {
+          return a.screenName.localeCompare(b.screenName);
+        }
+        return a.frameId.localeCompare(b.frameId);
+      });
+
+      logger.info("Generation review payload", {
+        projectId,
+        runId,
+        reason,
+        generationId: activeGenerationId,
+        screenCount: entries.length,
+        screens: entries.map((entry) => ({
+          frameId: entry.frameId,
+          screenName: entry.screenName,
+          state: entry.state,
+          error: entry.error,
+          codeLength: entry.code.length,
+          code: entry.code,
+        })),
+      });
+    },
+    [projectId],
+  );
+
   const flushChunkBuffer = useCallback(() => {
     if (dirtyScreensRef.current.size === 0) return;
 
@@ -223,7 +360,7 @@ const StudioPage = () => {
       const next = new Map(current);
 
       for (const screenName of dirtyScreens) {
-        const frameId = frameIdsRef.current.get(screenName);
+        const frameId = resolveFrameIdForScreen(screenName);
         if (!frameId) continue;
 
         const frame = next.get(frameId);
@@ -244,7 +381,7 @@ const StudioPage = () => {
 
       return changed ? next : current;
     });
-  }, [applyFrames]);
+  }, [applyFrames, resolveFrameIdForScreen]);
 
   const startChunkFlusher = useCallback(() => {
     if (chunkFlushIntervalRef.current) return;
@@ -260,6 +397,91 @@ const StudioPage = () => {
     clearInterval(chunkFlushIntervalRef.current);
     chunkFlushIntervalRef.current = null;
   }, []);
+
+  const finalizePendingFrames = useCallback(
+    ({
+      preferError = false,
+      errorMessage,
+    }: {
+      preferError?: boolean;
+      errorMessage?: string;
+    }) => {
+      flushChunkBuffer();
+
+      applyFrames((current) => {
+        let changed = false;
+        const next = new Map(current);
+
+        const finalizeFrame = (frameId: string, bufferedContent?: string) => {
+          const frame = next.get(frameId);
+          if (!frame) return;
+
+          const resolvedContent = bufferedContent ?? frame.content;
+          const hasRenderableContent = resolvedContent.trim().length > 0;
+          const nextState =
+            preferError || !hasRenderableContent ? "error" : "done";
+          const nextError =
+            nextState === "error"
+              ? (errorMessage ??
+                "Generation ended before this screen completed.")
+              : null;
+
+          if (
+            frame.state === nextState &&
+            frame.content === resolvedContent &&
+            frame.error === nextError
+          ) {
+            return;
+          }
+          logger.info("Content: ", resolvedContent);
+          changed = true;
+          next.set(frameId, {
+            ...frame,
+            state: nextState,
+            content: resolvedContent,
+            error: nextError,
+          });
+
+          upsertGenerationReviewEntry({
+            frameId,
+            screenName: frame.screenName,
+            generationId: frame.generationId,
+            state: nextState,
+            error: nextError,
+            code: resolvedContent,
+          });
+        };
+
+        for (const [screenName, bufferedContent] of screenBuffersRef.current) {
+          const frameId = resolveFrameIdForScreen(screenName);
+          if (!frameId) continue;
+          finalizeFrame(frameId, bufferedContent);
+        }
+
+        for (const [frameId, frame] of next) {
+          if (frame.state !== "streaming" && frame.state !== "skeleton") {
+            continue;
+          }
+          finalizeFrame(frameId);
+        }
+
+        return changed ? next : current;
+      });
+
+      activeFrameIdsRef.current.clear();
+      screenBuffersRef.current.clear();
+      dirtyScreensRef.current.clear();
+      setActiveStreamingScreen(null);
+      stopChunkFlusher();
+    },
+    [
+      applyFrames,
+      flushChunkBuffer,
+      resolveFrameIdForScreen,
+      stopChunkFlusher,
+      upsertGenerationReviewEntry,
+    ],
+  );
 
   const onCapture = useCallback(async () => {
     if (isUploadingThumbnailRef.current || !domRef.current) {
@@ -302,9 +524,14 @@ const StudioPage = () => {
 
       setFrames(restoredFrames);
       framesRef.current = restoredFrames;
-      frameIdsRef.current = new Map(
-        snapshot.frames.map((frame) => [frame.screenName, frame.id]),
-      );
+      const restoredFrameIds = new Map<string, string[]>();
+      for (const frame of snapshot.frames) {
+        const frameIds = restoredFrameIds.get(frame.screenName) ?? [];
+        frameIds.push(frame.id);
+        restoredFrameIds.set(frame.screenName, frameIds);
+      }
+      frameIdsRef.current = restoredFrameIds;
+      activeFrameIdsRef.current.clear();
 
       setSelectedFrameId(snapshot.selectedFrameId ?? null);
       if (snapshot.activeFrameId) {
@@ -342,7 +569,9 @@ const StudioPage = () => {
         );
 
         const generationId = crypto.randomUUID();
+        activeGenerationIdRef.current = generationId;
         frameIdsRef.current = new Map();
+        activeFrameIdsRef.current.clear();
         screenBuffersRef.current = new Map();
         dirtyScreensRef.current.clear();
 
@@ -353,7 +582,19 @@ const StudioPage = () => {
             const frameId = crypto.randomUUID();
             const position = positions[index];
 
-            frameIdsRef.current.set(screen.name, frameId);
+            const frameIds = frameIdsRef.current.get(screen.name) ?? [];
+            frameIds.push(frameId);
+            frameIdsRef.current.set(screen.name, frameIds);
+
+            upsertGenerationReviewEntry({
+              frameId,
+              screenName: screen.name,
+              generationId,
+              state: "skeleton",
+              error: null,
+              code: "",
+            });
+
             next.set(frameId, {
               id: frameId,
               screenName: screen.name,
@@ -383,7 +624,7 @@ const StudioPage = () => {
       }
 
       if (event.type === "screen_start") {
-        const frameId = frameIdsRef.current.get(event.screen);
+        const frameId = claimFrameIdForScreen(event.screen);
         screenBuffersRef.current.set(event.screen, "");
         setActiveStreamingScreen(event.screen);
         startChunkFlusher();
@@ -405,7 +646,7 @@ const StudioPage = () => {
       }
 
       if (event.type === "screen_reset") {
-        const frameId = frameIdsRef.current.get(event.screen);
+        const frameId = resolveFrameIdForScreen(event.screen);
         screenBuffersRef.current.set(event.screen, "");
         dirtyScreensRef.current.delete(event.screen);
         startChunkFlusher();
@@ -437,10 +678,13 @@ const StudioPage = () => {
 
       if (event.type === "screen_done") {
         flushChunkBuffer();
-        const frameId = frameIdsRef.current.get(event.screen);
+        const frameId = resolveFrameIdForScreen(event.screen);
         if (!frameId) return;
 
         const finalCode = screenBuffersRef.current.get(event.screen) ?? "";
+        const frame = framesRef.current.get(frameId);
+        const generationId =
+          frame?.generationId ?? activeGenerationIdRef.current ?? "unknown";
         screenBuffersRef.current.delete(event.screen);
         dirtyScreensRef.current.delete(event.screen);
 
@@ -458,6 +702,17 @@ const StudioPage = () => {
           return next;
         });
 
+        upsertGenerationReviewEntry({
+          frameId,
+          screenName: event.screen,
+          generationId,
+          state: "done",
+          error: null,
+          code: finalCode,
+        });
+
+        activeFrameIdsRef.current.delete(event.screen);
+
         setActiveStreamingScreen((current) =>
           current === event.screen ? null : current,
         );
@@ -466,9 +721,7 @@ const StudioPage = () => {
       }
 
       if (event.type === "done") {
-        flushChunkBuffer();
-        stopChunkFlusher();
-        setActiveStreamingScreen(null);
+        finalizePendingFrames({ preferError: false });
 
         updateProjectStatus({ id: projectId, status: "ACTIVE" });
 
@@ -486,24 +739,33 @@ const StudioPage = () => {
           captureTimeoutRef.current = null;
         }, 2000);
 
+        emitGenerationReviewLog("done");
         scheduleSnapshotPersist();
         return;
       }
 
       if (event.type === "error") {
-        stopChunkFlusher();
-        setActiveStreamingScreen(null);
+        finalizePendingFrames({
+          preferError: true,
+          errorMessage: event.message,
+        });
         updateProjectStatus({ id: projectId, status: "ARCHIVED" });
+        emitGenerationReviewLog("error");
+        scheduleSnapshotPersist();
       }
     },
     [
       applyFrames,
+      claimFrameIdForScreen,
+      finalizePendingFrames,
       flushChunkBuffer,
+      emitGenerationReviewLog,
       onCapture,
       projectId,
+      resolveFrameIdForScreen,
       scheduleSnapshotPersist,
       startChunkFlusher,
-      stopChunkFlusher,
+      upsertGenerationReviewEntry,
       updateProjectStatus,
     ],
   );
@@ -516,6 +778,13 @@ const StudioPage = () => {
 
     setIsGenerating(true);
     setActiveStreamingScreen(null);
+    generationRunIdRef.current = crypto.randomUUID();
+    activeGenerationIdRef.current = null;
+    generationReviewRef.current = new Map();
+    generationLogEmittedRef.current = false;
+
+    let terminalEventReceived = false;
+    let streamFailed = false;
 
     try {
       stopChunkFlusher();
@@ -547,44 +816,105 @@ const StudioPage = () => {
       const decoder = new TextDecoder();
       let sseBuffer = "";
 
+      const processSseLines = (lines: string[]) => {
+        for (const line of lines) {
+          if (!line.startsWith("data:")) continue;
+
+          const raw = line.slice(5).trim();
+          if (!raw) continue;
+
+          if (raw === "[DONE]") {
+            return true;
+          }
+
+          try {
+            const event = JSON.parse(raw) as GenerationEvent;
+            if (event.type === "done" || event.type === "error") {
+              terminalEventReceived = true;
+            }
+            handleEvent(event);
+          } catch (parseError) {
+            logger.warn("Skipping malformed SSE payload", {
+              rawSnippet: raw.slice(0, 200),
+              parseError,
+            });
+          }
+        }
+
+        return false;
+      };
+
       while (true) {
         const { done, value } = await reader.read();
-        if (done) break;
 
-        sseBuffer += decoder.decode(value, { stream: true });
-        const lines = sseBuffer.split("\n");
-        sseBuffer = lines.pop() ?? "";
+        if (value) {
+          sseBuffer += decoder.decode(value, { stream: true });
 
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
+          const lines = sseBuffer.split(/\r?\n/);
+          sseBuffer = lines.pop() ?? "";
 
-          const raw = line.slice(6).trim();
-          if (raw === "[DONE]") {
+          if (processSseLines(lines)) {
             stopChunkFlusher();
             return;
           }
+        }
 
-          const event = JSON.parse(raw) as GenerationEvent;
-          handleEvent(event);
+        if (done) {
+          // Flush decoder state and process any trailing buffered event lines.
+          sseBuffer += decoder.decode();
+
+          if (sseBuffer) {
+            if (processSseLines(sseBuffer.split(/\r?\n/))) {
+              stopChunkFlusher();
+              return;
+            }
+          }
+
+          break;
         }
       }
     } catch (error) {
-      stopChunkFlusher();
+      streamFailed = true;
+      finalizePendingFrames({
+        preferError: true,
+        errorMessage:
+          error instanceof Error
+            ? error.message
+            : "Generation failed unexpectedly.",
+      });
       updateProjectStatus({ id: projectId, status: "ARCHIVED" });
       logger.error("Error generating layout:", error);
+      emitGenerationReviewLog("request-failed");
     } finally {
+      if (
+        !streamFailed &&
+        !terminalEventReceived &&
+        frameIdsRef.current.size > 0
+      ) {
+        logger.warn(
+          "Generation stream closed without terminal done/error event; applying completion fallback.",
+        );
+        finalizePendingFrames({ preferError: false });
+        updateProjectStatus({ id: projectId, status: "ACTIVE" });
+        emitGenerationReviewLog("stream-close-fallback");
+        scheduleSnapshotPersist();
+      }
+
       flushChunkBuffer();
       stopChunkFlusher();
       setActiveStreamingScreen(null);
       setIsGenerating(false);
     }
   }, [
+    finalizePendingFrames,
     flushChunkBuffer,
     handleEvent,
+    emitGenerationReviewLog,
     model,
     project,
     projectId,
     prompt,
+    scheduleSnapshotPersist,
     spec,
     stopChunkFlusher,
     updateProjectStatus,
@@ -680,9 +1010,6 @@ const StudioPage = () => {
 
   useEffect(() => {
     if (projectLoading || isError) return;
-
-    logger.info("Project info:", project);
-    logger.warn("Project error:", projectError);
 
     if (!project) {
       logger.error("Project not found");

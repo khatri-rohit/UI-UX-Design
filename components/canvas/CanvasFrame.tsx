@@ -61,6 +61,7 @@ export const CanvasFrame = memo(function CanvasFrame({
   editedContent,
   state,
   thumbnail,
+  error,
   isActive,
   isSelected,
   scale,
@@ -214,6 +215,16 @@ export const CanvasFrame = memo(function CanvasFrame({
   const chromeTopHeight = platform === "web" ? WEB_CHROME_H : MOBILE_STATUS_H;
   const chromeBottomHeight = platform === "mobile" ? MOBILE_HOME_H : 0;
   const iframeHeight = h - chromeTopHeight - chromeBottomHeight;
+  const resolvedErrorMessage =
+    error?.trim() || "Generation failed before a valid preview could render.";
+  const isCompileError = /\b(compile|syntax|typescript|tsx|jsx|module)\b/i.test(
+    resolvedErrorMessage,
+  );
+  const errorTitle = isCompileError ? "Compile error" : "Generation failed";
+  const errorDetail =
+    resolvedErrorMessage.length > 220
+      ? `${resolvedErrorMessage.slice(0, 217)}...`
+      : resolvedErrorMessage;
 
   return (
     <div
@@ -293,9 +304,14 @@ export const CanvasFrame = memo(function CanvasFrame({
             className="absolute inset-0 flex items-center justify-center bg-[#1a0000]"
             style={{ top: chromeTopHeight, height: iframeHeight }}
           >
-            <span className="font-mono text-[10px] text-red-400/80">
-              Compile error
-            </span>
+            <div className="max-w-[86%] px-4 text-center">
+              <span className="font-mono text-[10px] text-red-300/90">
+                {errorTitle}
+              </span>
+              <p className="mt-1 font-mono text-[9px] leading-snug text-red-200/80">
+                {errorDetail}
+              </p>
+            </div>
           </div>
         )}
 
