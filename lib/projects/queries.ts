@@ -158,6 +158,22 @@ export async function updateProjectStatus(
   );
 }
 
+export async function updateProjectCanvasState(
+  id: string,
+  canvasState: unknown,
+) {
+  return requestApi<{
+    status: ProjectDetail["status"];
+    canvasState: ProjectDetail["canvasState"];
+  }>(`/api/projects/${id}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ canvasState }),
+  });
+}
+
 export function useProjectStatusUpdateMutation() {
   const queryClient = useQueryClient();
 
@@ -172,6 +188,26 @@ export function useProjectStatusUpdateMutation() {
     onSuccess: (data: { status: ProjectDetail["status"] }, { id }) => {
       queryClient.setQueryData<ProjectDetail>(["projects", id], (prev) =>
         prev ? { ...prev, status: data.status } : prev,
+      );
+    },
+  });
+}
+
+export function useProjectCanvasStateUpdateMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, canvasState }: { id: string; canvasState: unknown }) =>
+      updateProjectCanvasState(id, canvasState),
+    onSuccess: (data, { id }) => {
+      queryClient.setQueryData<ProjectDetail>(["projects", id], (prev) =>
+        prev
+          ? {
+              ...prev,
+              status: data.status,
+              canvasState: data.canvasState,
+            }
+          : prev,
       );
     },
   });

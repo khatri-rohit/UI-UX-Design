@@ -1,15 +1,23 @@
-import { Editor } from "tldraw";
 import { GenerationPlatform } from "./types";
 
 const H_GAP = 100; // gap between screens in same generation
 const V_GAP = 120; // gap between generations (vertical breathing room)
 
 export function getGenerationLayout(
-  editor: Editor,
+  existingFrames: Array<{ x: number; y: number; w: number; h: number }>,
   screens: Array<{ name: string; w: number; h: number }>, // pass dims in
 ): { x: number; y: number }[] {
-  const pageBounds = editor.getCurrentPageBounds();
-  const startY = pageBounds ? pageBounds.maxY + V_GAP : 0;
+  const hasFrames = existingFrames.length > 0;
+  const startY = hasFrames
+    ? Math.max(...existingFrames.map((frame) => frame.y + frame.h)) + V_GAP
+    : 0;
+  const minX = hasFrames
+    ? Math.min(...existingFrames.map((frame) => frame.x))
+    : 0;
+  const maxX = hasFrames
+    ? Math.max(...existingFrames.map((frame) => frame.x + frame.w))
+    : 0;
+  const midX = hasFrames ? (minX + maxX) / 2 : 0;
 
   // Position each screen with its actual width
   let currentX = 0;
@@ -17,7 +25,7 @@ export function getGenerationLayout(
     (sum, s, i) => sum + s.w + (i < screens.length - 1 ? H_GAP : 0),
     0,
   );
-  const startX = (pageBounds?.midX ?? 0) - totalW / 2;
+  const startX = midX - totalW / 2;
 
   return screens.map((screen) => {
     const x = startX + currentX;

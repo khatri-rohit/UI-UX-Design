@@ -9,11 +9,13 @@ import {
   STAGE3_SYSTEM,
 } from "@/lib/prompts";
 import { ComponentTreeNode, GenerationPlatform, WebAppSpec } from "@/lib/types";
+import type { Prisma } from "@/app/generated/prisma/client";
 import logger from "@/lib/logger";
 import { buildEnhancedPrompt } from "@/lib/promptEnhancer";
 import { buildDesignContext, toDesignContextText } from "@/lib/designContext";
 import { isAuthError, requireAuthContext } from "@/lib/get-auth";
 import { generationRatelimit } from "@/lib/ratelimit";
+import prisma from "@/lib/prisma";
 
 export const runtime = "nodejs";
 
@@ -210,7 +212,33 @@ export async function POST(req: NextRequest) {
       prompt,
       platform,
       model, // optional preferred model for stage 3
+      projectId,
     } = await req.json();
+
+    if (typeof projectId !== "string" || !projectId.trim()) {
+      return NextResponse.json(
+        {
+          error: true,
+          message: "projectId is required",
+        },
+        { status: 400 },
+      );
+    }
+
+    const project = await prisma.project.findUnique({
+      where: { id: projectId, userId: authContext.appUserId },
+      select: { id: true },
+    });
+
+    if (!project) {
+      return NextResponse.json(
+        {
+          error: true,
+          message: "Project not found",
+        },
+        { status: 404 },
+      );
+    }
     const requestedPlatform = normalizePlatform(platform);
     const designContext = await buildDesignContext({
       prompt,
@@ -238,6 +266,7 @@ export async function POST(req: NextRequest) {
 
     (async () => {
       try {
+        const screenCodeByName: Record<string, string> = {};
         // Stage 1 — structured spec extraction (non-streaming)
         // generateText = wait for full response, no stream
         logger.info("Starting Stage 1: Spec Extraction");
@@ -278,6 +307,7 @@ export async function POST(req: NextRequest) {
 
           let screenGenerated = false;
           let streamErr: unknown = null;
+          let screenCode = "";
 
           for (let i = 0; i < stage3ModelPriority.length; i++) {
             const candidateModel = stage3ModelPriority[i];
@@ -307,6 +337,7 @@ export async function POST(req: NextRequest) {
               });
 
               for await (const token of result.textStream) {
+                screenCode += token;
                 await write({ type: "code_chunk", screen, token });
               }
 
@@ -327,7 +358,24 @@ export async function POST(req: NextRequest) {
             );
           }
 
+          screenCodeByName[screen] = screenCode;
+
           await write({ type: "screen_done", screen });
+        }
+
+        try {
+          await prisma.generation.create({
+            data: {
+              projectId: project.id,
+              model:
+                typeof model === "string" && model.length > 0 ? model : "auto",
+              spec: spec as unknown as Prisma.InputJsonValue,
+              prompt,
+              screens: screenCodeByName as unknown as Prisma.InputJsonValue,
+            },
+          });
+        } catch (persistErr) {
+          logger.error("Failed to persist generation payload", persistErr);
         }
 
         logger.info("Generation complete");

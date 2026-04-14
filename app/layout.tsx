@@ -50,8 +50,8 @@ export default function RootLayout({
             <ClerkProviders>{children}</ClerkProviders>
           </QueryProvider>
         </UserActivityStoreProvider>
-        <Analytics />
-        <SpeedInsights />
+        {/* <Analytics />
+        <SpeedInsights /> */}
       </body>
     </html>
   );

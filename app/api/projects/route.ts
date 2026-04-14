@@ -61,10 +61,23 @@ export async function POST(req: NextRequest) {
       const queueBaseUrl = process.env.BACKGROUND_TASK_QUEUE_PUBLIC_URL;
       if (!queueBaseUrl)
         throw new Error("Missing BACKGROUND_TASK_QUEUE_PUBLIC_URL");
+      const metadataTaskVerificationToken =
+        process.env.BACKGROUND_TASK_INTERNAL_TOKEN;
+
+      if (!metadataTaskVerificationToken) {
+        logger.warn(
+          "BACKGROUND_TASK_INTERNAL_TOKEN is not set; metadata task authorization is operating in compatibility mode.",
+        );
+      }
 
       const result = await client.publishJSON({
         url: `${queueBaseUrl}/api/projects/${newProject.id}/meta-data`,
-        body: { projectId: newProject.id, prompt },
+        body: {
+          projectId: newProject.id,
+          prompt,
+          userId: authContext.appUserId,
+          verificationToken: metadataTaskVerificationToken ?? null,
+        },
       });
 
       logger.info("Published project meta-data task to QStash", {

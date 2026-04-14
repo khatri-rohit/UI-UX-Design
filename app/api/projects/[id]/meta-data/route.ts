@@ -7,7 +7,12 @@ import logger from "@/lib/logger";
 
 export const POST = verifySignatureAppRouter(async (req: Request) => {
   const body = await req.json();
-  const { projectId, prompt } = body as { projectId: string; prompt: string };
+  const { projectId, prompt, userId, verificationToken } = body as {
+    projectId: string;
+    prompt: string;
+    userId?: string;
+    verificationToken?: string | null;
+  };
 
   const pathname = new URL(req.url).pathname;
 
@@ -18,6 +23,33 @@ export const POST = verifySignatureAppRouter(async (req: Request) => {
 
   if (projectId && projectId !== routeProjectId) {
     return new Response("Route/body projectId mismatch", { status: 400 });
+  }
+
+  const expectedVerificationToken = process.env.BACKGROUND_TASK_INTERNAL_TOKEN;
+  if (
+    expectedVerificationToken &&
+    verificationToken !== expectedVerificationToken
+  ) {
+    return new Response("Invalid metadata task token", { status: 401 });
+  }
+
+  if (!userId) {
+    return new Response("Missing userId in metadata task payload", {
+      status: 400,
+    });
+  }
+
+  const project = await prisma.project.findUnique({
+    where: { id: routeProjectId },
+    select: { id: true, userId: true },
+  });
+
+  if (!project) {
+    return new Response("Project not found", { status: 404 });
+  }
+
+  if (project.userId !== userId) {
+    return new Response("Forbidden project metadata update", { status: 403 });
   }
 
   // Project meta-data processing logic
@@ -37,12 +69,12 @@ export const POST = verifySignatureAppRouter(async (req: Request) => {
   });
 
   logger.info("Generated project meta-data from prompt", {
-    projectId,
+    projectId: routeProjectId,
     projectTitle,
     projectDescription,
   });
   await prisma.project.update({
-    where: { id: projectId },
+    where: { id: routeProjectId },
     data: {
       title: projectTitle,
       description: projectDescription,
@@ -50,6 +82,6 @@ export const POST = verifySignatureAppRouter(async (req: Request) => {
   });
 
   return new Response(
-    "Background meta-data processing completed for project " + projectId,
+    "Background meta-data processing completed for project " + routeProjectId,
   );
 });

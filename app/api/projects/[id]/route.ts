@@ -1,5 +1,6 @@
 import { isAuthError, requireAuthContext } from "@/lib/get-auth";
 import prisma from "@/lib/prisma";
+import { Prisma } from "@/app/generated/prisma/client";
 import { NextResponse, NextRequest } from "next/server";
 
 export async function GET(
@@ -59,6 +60,8 @@ export async function GET(
           title: project.title,
           status: project.status,
           initialPrompt: project.initialPrompt,
+          canvasState: project.canvasState,
+          thumbnailUrl: project.thumbnailUrl,
         },
       },
       { status: 200 },
@@ -119,8 +122,31 @@ export async function PATCH(
         { status: 400 },
       );
     }
-    const { status } = await req.json();
-    if (!status || !ProjectStatus.includes(status)) {
+    const body = (await req.json()) as {
+      status?: (typeof ProjectStatus)[number];
+      canvasState?: unknown;
+    };
+
+    const hasStatus = typeof body.status === "string";
+    const hasCanvasState = "canvasState" in body;
+    const canvasStateUpdate = hasCanvasState
+      ? body.canvasState === null
+        ? Prisma.DbNull
+        : (body.canvasState as Prisma.InputJsonValue)
+      : undefined;
+
+    if (!hasStatus && !hasCanvasState) {
+      return NextResponse.json(
+        {
+          error: true,
+          message: "No updatable fields provided",
+          data: null,
+        },
+        { status: 400 },
+      );
+    }
+
+    if (hasStatus && !ProjectStatus.includes(body.status!)) {
       return NextResponse.json(
         {
           error: true,
@@ -146,16 +172,22 @@ export async function PATCH(
       );
     }
 
-    await prisma.project.update({
+    const updatedProject = await prisma.project.update({
       where: { id },
-      data: { status },
+      data: {
+        ...(hasStatus && { status: body.status }),
+        ...(hasCanvasState && { canvasState: canvasStateUpdate }),
+      },
     });
 
     return NextResponse.json(
       {
         error: false,
-        message: "Project status updated successfully",
-        data: { status },
+        message: "Project updated successfully",
+        data: {
+          status: updatedProject.status,
+          canvasState: updatedProject.canvasState,
+        },
       },
       { status: 200 },
     );

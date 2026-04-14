@@ -11,7 +11,7 @@ Our goal is to dramatically reduce the time from conception to functioning proto
 This project is built using modern web standards to ensure scalability, robust performance, and rapid iterations.
 
 - **Framework**: Next.js 16 (App Router) & React 19
-- **Infinite Canvas**: [tldraw](https://tldraw.dev) (Enabling a Figma-like workspace)
+- **Infinite Canvas**: Custom DOM-based canvas engine with camera controls (pan, zoom, fit)
 - **Live Code Compilation**: CodeSandbox Sandpack Client & Web Workers
 - **AI Backend**: Vercel AI SDK (`ai`) paired with local inference (`ollama-ai-provider-v2`)
 - **Styling & UI**: Tailwind CSS v4, Radix UI, and Shadcn components
@@ -23,8 +23,8 @@ The platform is currently in its Phase 1 MVP status, focusing on the core genera
 
 - **Prompt-Driven Generation**: Input natural language prompts to automatically generate UI screens.
 - **Multiple Screen Generation**: Build and output several views simultaneously.
-- **Infinite Canvas Workspace**: A fully interactive canvas (powered by tldraw) natively supporting zooming and panning.
-- **Drag & Drop Artboards**: Phone-framed artboards that can be manipulated freely across the workspace.
+- **Infinite Canvas Workspace**: A fully interactive custom canvas supporting zooming, panning, and fit-to-frames navigation.
+- **Adaptive Artboards**: Phone and web framed previews auto-size based on rendered output.
 - **Side-by-Step Layout**: Live orchestration of screens positioned organically for UX flow mapping.
 - **Immediate Live Previews**: Rendered using an in-browser compilation step (via Sandpack).
 
@@ -109,6 +109,23 @@ DIRECT_URL="postgresql://postgres:[YOUR-PASSWORD]@db.[YOUR-PROJECT-REF].supabase
 
 If direct host access is not available (for example on IPv4-only environments),
 you can use the Supabase session pooler on port `5432` as a fallback `DIRECT_URL`.
+
+### Background Task Queue Security
+
+Project meta-data generation is dispatched via Upstash QStash.
+
+Required environment variables:
+
+```env
+QSTASH_TOKEN="[YOUR-QSTASH-TOKEN]"
+BACKGROUND_TASK_QUEUE_PUBLIC_URL="https://[YOUR-DEPLOYED-APP-URL]"
+BACKGROUND_TASK_INTERNAL_TOKEN="[RANDOM-LONG-SECRET]"
+```
+
+Notes:
+
+- `BACKGROUND_TASK_INTERNAL_TOKEN` is validated by `/api/projects/[id]/meta-data` to prevent unauthorized background mutations.
+- Use a long random value and keep it server-only.
 
 ### Supabase Storage S3 (Project Thumbnails)
 
