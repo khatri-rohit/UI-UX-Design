@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { JetBrains_Mono } from "next/font/google";
 import { useRouter } from "next/navigation";
-import type { LucideIcon } from "lucide-react";
+import { Loader2, LucideIcon } from "lucide-react";
 import {
   ArrowUp,
   Bolt,
@@ -423,10 +423,18 @@ const Dashboard = () => {
                     <Button
                       size="icon-sm"
                       aria-label="Submit command"
-                      onClick={() => void handleSubmit()}
+                      onClick={() => {
+                        if (!canSubmit) return;
+                        void handleSubmit();
+                      }}
                       disabled={!canSubmit}
+                      className="cursor-pointer"
                     >
-                      <ArrowUp />
+                      {canSubmit ? (
+                        <ArrowUp />
+                      ) : (
+                        <Loader2 className="animate-spin" />
+                      )}
                     </Button>
                   </div>
                 </div>

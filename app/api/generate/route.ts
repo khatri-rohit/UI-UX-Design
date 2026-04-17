@@ -17,12 +17,12 @@ import { generationRatelimit } from "@/lib/ratelimit";
 
 export const runtime = "nodejs";
 
-const STAGE1_MODELS = ["deepseek-v3.2:cloud", "gpt-oss:120b"];
-const STAGE2_MODELS = [
-  "deepseek-v3.2:cloud",
-  "gpt-oss:120b",
-  "deepseek-v3.1:671b",
-];
+// const STAGE1_MODELS = ["deepseek-v3.2:cloud", "gpt-oss:120b"];
+// const STAGE2_MODELS = [
+//   "deepseek-v3.2:cloud",
+//   "gpt-oss:120b",
+//   "deepseek-v3.1:671b",
+// ];
 const STAGE3_MODELS = [
   "gemma4:31b",
   "deepseek-v3.1:671b",
@@ -150,31 +150,6 @@ function parseJsonStrict<T>(raw: string): T {
     if (!match) throw new Error("No JSON object found in model output");
     return JSON.parse(match[0]) as T;
   }
-}
-
-async function generateWithModelFallback(
-  ollama: ReturnType<typeof initializeOllama>,
-  models: string[],
-  system: string,
-  prompt: string,
-): Promise<{ text: string; model: string }> {
-  let lastError: unknown = null;
-  for (const model of models) {
-    try {
-      const { text } = await generateText({
-        model: ollama(model),
-        system,
-        prompt,
-      });
-      logger.info(`Model succeeded: ${model}`);
-      return { text, model };
-    } catch (err) {
-      lastError = err;
-      logger.warn(`Model failed: ${model}`, err);
-    }
-  }
-
-  throw new Error(`All models failed: ${String(lastError)}`);
 }
 
 export async function POST(req: NextRequest) {
@@ -320,33 +295,32 @@ export async function POST(req: NextRequest) {
         // generateText = wait for full response, no stream
         logger.info("Starting Stage 1: Spec Extraction");
 
-        const { text: rawSpec, model: stage1Model } =
-          await generateWithModelFallback(
-            ollama,
-            STAGE1_MODELS,
-            STAGE1_SYSTEM,
-            `User prompt: ${enhancedPrompt}\nPlatform: ${requestedPlatform}\n${designContextText}`,
-          );
+        const { text: rawSpec } = await generateText({
+          model: ollama(body.model as string),
+          system: STAGE1_SYSTEM,
+          prompt: `User prompt: ${enhancedPrompt}\nPlatform: ${requestedPlatform}\n${designContextText}`,
+        });
+
         const rawParsedSpec = parseJsonStrict<Partial<WebAppSpec>>(rawSpec);
         const spec = splitMobileScreensIfNeeded(
           coerceSpec(rawParsedSpec, requestedPlatform),
           enhancedPrompt,
         );
-        logger.info(`Stage 1 complete via model: ${stage1Model}`);
+        logger.info("Stage 1 complete");
         await write({ type: "design_context", designContext });
         await write({ type: "spec", spec });
 
         // Stage 2 — component planner (non-streaming)
         logger.info("Starting Stage 2: Component Planner");
-        const { text: rawTree, model: stage2Model } =
-          await generateWithModelFallback(
-            ollama,
-            STAGE2_MODELS,
-            STAGE2_SYSTEM,
-            `${requestedPlatform}Spec: ${JSON.stringify(spec)}\n${designContextText}`,
-          );
+        const { text: rawTree } = await generateText({
+          model: ollama(body.model as string),
+          system: STAGE2_SYSTEM,
+          prompt: `${requestedPlatform}Spec: ${JSON.stringify(spec)}\n${designContextText}`,
+        });
+        console.log(rawTree);
         const tree = parseJsonStrict<ComponentTreeNode[]>(rawTree);
-        logger.info(`Stage 2 complete via model: ${stage2Model}`);
+        console.log(tree);
+        logger.info("Stage 2 complete");
         await write({ type: "tree", tree });
 
         // Stage 3 — code synthesis per screen (streaming)
@@ -384,9 +358,15 @@ export async function POST(req: NextRequest) {
                 temperature: 0.2,
               });
 
+              logger.info(
+                "Awaiting stream of code chunks for screen: ",
+                screen,
+              );
+
               for await (const token of result.textStream) {
                 await write({ type: "code_chunk", screen, token });
               }
+              // logger.info("Result output: ", await result.output);
 
               screenGenerated = true;
               break;
