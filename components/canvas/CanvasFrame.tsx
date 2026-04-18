@@ -1,7 +1,6 @@
 "use client";
 
 import { memo, useCallback, useEffect, useRef } from "react";
-import type { MouseEvent as ReactMouseEvent } from "react";
 
 import { useFrameLifecycle } from "@/components/canvas/hooks/useFrameLifecycle";
 import { CanvasFrameData } from "@/components/canvas/types";
@@ -50,7 +49,7 @@ interface CanvasFrameProps extends CanvasFrameData {
   onActivate: (id: string) => void;
   onMove: (id: string, x: number, y: number) => void;
   onResize: (id: string, w: number, h: number) => void;
-  handleFrame: (event: ReactMouseEvent<HTMLDivElement>, id: string) => void;
+  handleFrame: (id: string) => void;
   handleSelectContext?: (frameId: string) => void;
 }
 
@@ -455,13 +454,10 @@ export const CanvasFrame = memo(function CanvasFrame({
         </div>
       </ContextMenuTrigger>
       {/* Context menu content can be added here */}
-      <ContextMenuContent
-        onEscapeKeyDown={(event) => event.stopPropagation()}
-        onClick={(event: ReactMouseEvent<HTMLDivElement>) =>
-          handleFrame(event, id)
-        }
-      >
-        <ContextMenuItem>Regenerate</ContextMenuItem>
+      <ContextMenuContent onEscapeKeyDown={(event) => event.stopPropagation()}>
+        <ContextMenuItem onSelect={() => handleFrame(id)}>
+          Regenerate
+        </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>
   );

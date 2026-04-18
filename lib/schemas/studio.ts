@@ -139,6 +139,14 @@ export const generationRequestBodySchema = z.object({
   idempotencyKey: z.string().trim().min(8).max(128).optional(),
 });
 
+export const frameRegenerateRequestBodySchema = z.object({
+  projectId: projectIdSchema,
+  generationId: z.string().cuid().optional(),
+  prompt: z.string().trim().min(1).max(10000).optional(),
+  model: z.string().trim().min(1).max(80).optional(),
+  idempotencyKey: z.string().trim().min(8).max(128).optional(),
+});
+
 export const projectRouteParamsSchema = z.object({
   id: projectIdSchema,
 });
