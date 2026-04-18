@@ -4,6 +4,7 @@ import { generateText } from "ai";
 import prisma from "@/lib/prisma";
 import { initializeOllama } from "@/lib/ollama";
 import logger from "@/lib/logger";
+import { revalidateTag } from "next/cache";
 
 const PROJECT_ID_PATTERN = /^c[a-z0-9]{24}$/;
 const MAX_METADATA_PROMPT_LENGTH = 10000;
@@ -74,8 +75,6 @@ export const POST = verifySignatureAppRouter(
 
     logger.info("Generated project meta-data from prompt", {
       projectId: routeProjectId,
-      projectTitle,
-      projectDescription,
     });
 
     const normalizedTitle = projectTitle.trim() || "Untitled Project";
@@ -88,6 +87,8 @@ export const POST = verifySignatureAppRouter(
         description: normalizedDescription || null,
       },
     });
+
+    revalidateTag("projects" + routeProjectId, "max");
 
     return new Response(
       "Background meta-data processing completed for project " + routeProjectId,

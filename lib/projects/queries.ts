@@ -6,8 +6,14 @@ import {
 } from "@tanstack/react-query";
 
 import { ApiError, requestApi } from "@/lib/api/http";
-import { ProjectDetail, ProjectSummary } from "../api/types";
-import { CanvasSnapshotV1 } from "@/lib/canvas-state";
+import {
+  ProjectDetail,
+  ProjectGeneration,
+  ProjectPatchResult,
+  ProjectStatus,
+  ProjectSummary,
+} from "../api/types";
+import { CanvasFrameSnapshot, CanvasSnapshotV1 } from "@/lib/canvas-state";
 
 type CreateProjectInput = {
   prompt: string;
@@ -45,6 +51,7 @@ async function createProject({ prompt }: CreateProjectInput) {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ prompt: normalizedPrompt }),
+    next: { tags: ["list"] },
   });
 }
 
@@ -53,6 +60,7 @@ export function projectsListQueryOptions() {
     queryKey: projectKeys.list(),
     queryFn: listProjects,
     refetchOnWindowFocus: false,
+    staleTime: Infinity, // ← Data never becomes stale
   });
 }
 
@@ -104,12 +112,71 @@ async function getProject(id: string): Promise<ProjectDetail> {
   return requestApi<ProjectDetail>(`/api/projects/${id}`);
 }
 
+function flattenGenerationFrames(
+  generations: ProjectGeneration[],
+): CanvasFrameSnapshot[] {
+  return generations.flatMap((generation) =>
+    generation.screens.map((screen) => ({
+      ...screen,
+      generationId: generation.generationId,
+      platform: generation.platform,
+    })),
+  );
+}
+
+function mergePatchedProjectDetail(
+  previous: ProjectDetail | undefined,
+  patchResult: ProjectPatchResult,
+): ProjectDetail | undefined {
+  if (!previous) {
+    const generations = patchResult.generation ? [patchResult.generation] : [];
+
+    return {
+      id: patchResult.project.id,
+      title: patchResult.project.title,
+      initialPrompt: patchResult.project.initialPrompt,
+      status: patchResult.project.status,
+      canvasState: patchResult.project.canvasState,
+      generations,
+      frames: flattenGenerationFrames(generations),
+    };
+  }
+
+  let generations = previous.generations;
+
+  if (patchResult.generation) {
+    const existingIndex = generations.findIndex(
+      (generation) =>
+        generation.generationId === patchResult.generation?.generationId,
+    );
+
+    if (existingIndex === -1) {
+      generations = [...generations, patchResult.generation];
+    } else {
+      generations = [...generations];
+      generations[existingIndex] = patchResult.generation;
+    }
+  }
+
+  return {
+    ...previous,
+    id: patchResult.project.id,
+    title: patchResult.project.title,
+    initialPrompt: patchResult.project.initialPrompt,
+    status: patchResult.project.status,
+    canvasState: patchResult.project.canvasState,
+    generations,
+    frames: flattenGenerationFrames(generations),
+  };
+}
+
 export function projectDetailQueryOptions(id: string) {
   return queryOptions({
     queryKey: ["projects", id] as const,
     queryFn: () => getProject(id),
     enabled: !!id,
-    staleTime: 30 * 1000,
+    refetchOnWindowFocus: false,
+    staleTime: Infinity, // ← Data never becomes stale
   });
 }
 
@@ -143,14 +210,8 @@ export function useProjectDeleteMutation() {
 }
 
 // -- Mutations for project status update
-export async function updateProjectStatus(
-  id: string,
-  status: "PENDING" | "GENERATING" | "ACTIVE" | "ARCHIVED",
-) {
-  return requestApi<{
-    status: ProjectDetail["status"];
-    canvasState: ProjectDetail["canvasState"];
-  }>(`/api/projects/${id}`, {
+export async function updateProjectStatus(id: string, status: ProjectStatus) {
+  return requestApi<ProjectPatchResult>(`/api/projects/${id}`, {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",
@@ -170,21 +231,9 @@ export function useProjectStatusUpdateMutation() {
       id: string;
       status: ProjectDetail["status"];
     }) => updateProjectStatus(id, status),
-    onSuccess: (
-      data: {
-        status: ProjectDetail["status"];
-        canvasState: ProjectDetail["canvasState"];
-      },
-      { id },
-    ) => {
+    onSuccess: (data, { id }) => {
       queryClient.setQueryData<ProjectDetail>(["projects", id], (prev) =>
-        prev
-          ? {
-              ...prev,
-              status: data.status,
-              canvasState: data.canvasState,
-            }
-          : prev,
+        mergePatchedProjectDetail(prev, data),
       );
     },
   });
@@ -193,16 +242,14 @@ export function useProjectStatusUpdateMutation() {
 export async function updateProjectCanvasState(
   id: string,
   canvasState: CanvasSnapshotV1 | null,
+  generationId?: string,
 ) {
-  return requestApi<{
-    status: ProjectDetail["status"];
-    canvasState: ProjectDetail["canvasState"];
-  }>(`/api/projects/${id}`, {
+  return requestApi<ProjectPatchResult>(`/api/projects/${id}`, {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ canvasState }),
+    body: JSON.stringify({ canvasState, generationId }),
   });
 }
 
@@ -221,10 +268,12 @@ export function useProjectCanvasStateUpdateMutation(
     mutationFn: ({
       id,
       canvasState,
+      generationId,
     }: {
       id: string;
       canvasState: CanvasSnapshotV1 | null;
-    }) => updateProjectCanvasState(id, canvasState),
+      generationId?: string;
+    }) => updateProjectCanvasState(id, canvasState, generationId),
     retry: (failureCount, error) => {
       return (
         error instanceof ApiError && error.status === 409 && failureCount < 2
@@ -233,13 +282,7 @@ export function useProjectCanvasStateUpdateMutation(
     retryDelay: (attemptIndex) => Math.min(300 * 2 ** attemptIndex, 2000),
     onSuccess: (data, { id }) => {
       queryClient.setQueryData<ProjectDetail>(["projects", id], (prev) =>
-        prev
-          ? {
-              ...prev,
-              status: data.status,
-              canvasState: data.canvasState,
-            }
-          : prev,
+        mergePatchedProjectDetail(prev, data),
       );
 
       options?.onPersisted?.();

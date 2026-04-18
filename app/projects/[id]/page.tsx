@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 
 import ProjectStudioClient from "@/components/projects/ProjectStudioClient";
+import { ProjectStudioStoreProvider } from "@/providers/project-studio-provider";
 
 interface ProjectPageProps {
   params: Promise<{ id: string }>;
@@ -15,5 +16,9 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
     notFound();
   }
 
-  return <ProjectStudioClient projectId={id} />;
+  return (
+    <ProjectStudioStoreProvider>
+      <ProjectStudioClient projectId={id} />
+    </ProjectStudioStoreProvider>
+  );
 }

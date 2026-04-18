@@ -86,18 +86,26 @@ model Project {
 }
 
 model Generation {
-    id        String   @id @default(cuid())
-    projectId String
-    model     String
-    spec      Json
-    prompt    String
-    screens   Json?
-    createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt
+    id             String             @id @default(cuid())
+    projectId      String
+    model          String
+    platform       GenerationPlatform @default(WEB)
+    spec           Json
+    prompt         String
+    screens        Json?
+    status         GenerationStatus   @default(PENDING)
+    terminalAt     DateTime?
+    errorMessage   String?
+    errorMeta      Json?
+    idempotencyKey String?            @unique
+    createdAt      DateTime           @default(now())
+    updatedAt      DateTime           @updatedAt
 
     project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
     @@index([projectId, createdAt])
+    @@index([projectId, status])
+    @@index([status, createdAt])
     @@map("Generation")
 }
 
@@ -130,4 +138,16 @@ enum ProjectStatus {
     GENERATING // Generation pipeline is running
     ACTIVE // Has at least one completed generation
     ARCHIVED // Soft-deleted or hidden
+}
+
+enum GenerationStatus {
+    PENDING
+    RUNNING
+    COMPLETED
+    FAILED
+}
+
+enum GenerationPlatform {
+    WEB
+    MOBILE
 }

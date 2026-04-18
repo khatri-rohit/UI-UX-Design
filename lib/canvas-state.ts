@@ -15,27 +15,51 @@ export interface CanvasCameraSnapshot {
 
 export interface CanvasFrameSnapshot {
   id: string;
-  screenName: string;
-  platform: GenerationPlatform;
+  generationId: string;
+  state: FrameState;
   x: number;
   y: number;
   w: number;
   h: number;
-  content: string;
-  editedContent: string | null;
-  state: FrameState;
-  thumbnail: string | null;
-  generationId: string;
+  screenName: string; //
+  platform: GenerationPlatform; //
+  content: string; //
+  editedContent: string | null; //
   error: string | null;
 }
 
-export interface CanvasSnapshotV1 {
+export interface PersistedGenerationScreen {
+  id: string;
+  state: FrameState;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  screenName: string;
+  content: string;
+  editedContent: string | null;
+  error: string | null;
+}
+
+export interface GeneratedFrame {
+  generationId: string;
+  screenName: string;
+  content: string;
+  platform: GenerationPlatform;
+  editedContent: string | null;
+}
+
+export interface CanvasStateMetadataV1 {
   version: 1;
   camera: CanvasCameraSnapshot;
-  frames: CanvasFrameSnapshot[];
   activeFrameId: string | null;
   selectedFrameId: string | null;
+  selectedGenerationId: string | null;
   savedAt: string;
+}
+
+export interface CanvasSnapshotV1 extends CanvasStateMetadataV1 {
+  frames: CanvasFrameSnapshot[];
 }
 
 const FRAME_STATES = new Set<FrameState>([
@@ -89,28 +113,76 @@ function isFrameSnapshot(value: unknown): value is CanvasFrameSnapshot {
     typeof value.content === "string" &&
     isStringOrNull(value.editedContent) &&
     isFrameState(value.state) &&
-    isStringOrNull(value.thumbnail) &&
     typeof value.generationId === "string" &&
+    isGenerationPlatform(value.platform) &&
     isStringOrNull(value.error)
   );
 }
 
-export function isCanvasSnapshotV1(value: unknown): value is CanvasSnapshotV1 {
+export function isPersistedGenerationScreen(
+  value: unknown,
+): value is PersistedGenerationScreen {
+  if (!isObject(value)) return false;
+
+  return (
+    typeof value.id === "string" &&
+    typeof value.screenName === "string" &&
+    isNumber(value.x) &&
+    isNumber(value.y) &&
+    isPositiveNumber(value.w) &&
+    isPositiveNumber(value.h) &&
+    typeof value.content === "string" &&
+    isStringOrNull(value.editedContent) &&
+    isFrameState(value.state) &&
+    isStringOrNull(value.error)
+  );
+}
+
+export function isCanvasStateMetadataV1(
+  value: unknown,
+): value is CanvasStateMetadataV1 {
   if (!isObject(value)) return false;
   if (value.version !== 1) return false;
   if (!isCameraSnapshot(value.camera)) return false;
-  if (!Array.isArray(value.frames) || !value.frames.every(isFrameSnapshot)) {
-    return false;
-  }
 
   const activeFrameIdValid =
     typeof value.activeFrameId === "string" || value.activeFrameId === null;
   const selectedFrameIdValid =
     typeof value.selectedFrameId === "string" || value.selectedFrameId === null;
+  const selectedGenerationIdValid =
+    typeof value.selectedGenerationId === "string" ||
+    value.selectedGenerationId === null ||
+    value.selectedGenerationId === undefined;
 
   return (
     activeFrameIdValid &&
     selectedFrameIdValid &&
+    selectedGenerationIdValid &&
     typeof value.savedAt === "string"
   );
+}
+
+export function isCanvasSnapshotV1(value: unknown): value is CanvasSnapshotV1 {
+  if (!isCanvasStateMetadataV1(value)) return false;
+
+  const maybeFrames = (value as unknown as { frames?: unknown }).frames;
+
+  if (!Array.isArray(maybeFrames)) {
+    return false;
+  }
+
+  return maybeFrames.every(isFrameSnapshot);
+}
+
+export function toCanvasStateMetadata(
+  snapshot: CanvasSnapshotV1,
+): CanvasStateMetadataV1 {
+  return {
+    version: snapshot.version,
+    camera: snapshot.camera,
+    activeFrameId: snapshot.activeFrameId,
+    selectedFrameId: snapshot.selectedFrameId,
+    selectedGenerationId: snapshot.selectedGenerationId,
+    savedAt: snapshot.savedAt,
+  };
 }

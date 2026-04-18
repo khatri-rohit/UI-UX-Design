@@ -1,3 +1,8 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import {
+  GenerationPlatform as PrismaGenerationPlatform,
+  Prisma,
+} from "@/app/generated/prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 import { initializeOllama } from "@/lib/ollama";
 
@@ -14,6 +19,16 @@ import { buildEnhancedPrompt } from "@/lib/promptEnhancer";
 import { buildDesignContext, toDesignContextText } from "@/lib/designContext";
 import { isAuthError, requireAuthContext } from "@/lib/get-auth";
 import { generationRatelimit } from "@/lib/ratelimit";
+import prisma from "@/lib/prisma";
+import {
+  generationRequestBodySchema,
+  toValidationIssues,
+} from "@/lib/schemas/studio";
+import {
+  getGenerationLayout,
+  getInitialDimensionsForPlatform,
+} from "@/lib/canvasLayout";
+import { PersistedGenerationScreen } from "@/lib/canvas-state";
 
 export const runtime = "nodejs";
 
@@ -32,11 +47,16 @@ const STAGE3_MODELS = [
   "deepseek-v3.2:cloud",
 ];
 
-const MAX_PROMPT_LENGTH = 10000;
 const MAX_MODEL_NAME_LENGTH = 80;
 
 function normalizePlatform(value: unknown): GenerationPlatform {
   return value === "mobile" ? "mobile" : "web";
+}
+
+function toPrismaPlatform(
+  platform: GenerationPlatform,
+): PrismaGenerationPlatform {
+  return platform === "mobile" ? "MOBILE" : "WEB";
 }
 
 function normalizeModelPreference(value: unknown): string | null {
@@ -222,6 +242,7 @@ export async function POST(req: NextRequest) {
         { status: 401 },
       );
     }
+
     try {
       const { success, limit, remaining, reset } =
         await generationRatelimit.limit(authContext.appUserId);
@@ -254,55 +275,42 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    let body: {
-      prompt?: unknown;
-      platform?: unknown;
-      model?: unknown;
-    };
-
+    let rawBody: unknown;
     try {
-      body = (await req.json()) as {
-        prompt?: unknown;
-        platform?: unknown;
-        model?: unknown;
-      };
+      rawBody = await req.json();
     } catch {
       return NextResponse.json(
         {
           error: true,
           message: "Request body must be valid JSON",
+          data: null,
         },
         { status: 400 },
       );
     }
 
-    const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
-    if (!prompt) {
+    const parsedBody = generationRequestBodySchema.safeParse(rawBody);
+    if (!parsedBody.success) {
       return NextResponse.json(
         {
           error: true,
-          message: "Prompt is required",
+          code: "VALIDATION_ERROR",
+          message: "Invalid generation payload",
+          issues: toValidationIssues(parsedBody.error),
+          data: null,
         },
         { status: 400 },
       );
     }
 
-    if (prompt.length > MAX_PROMPT_LENGTH) {
-      return NextResponse.json(
-        {
-          error: true,
-          message: `Prompt is too long. Maximum ${MAX_PROMPT_LENGTH} characters.`,
-        },
-        { status: 400 },
-      );
-    }
-
+    const body = parsedBody.data;
     const preferredModel = normalizeModelPreference(body.model);
     if (body.model !== undefined && !preferredModel) {
       return NextResponse.json(
         {
           error: true,
           message: "Invalid model value",
+          data: null,
         },
         { status: 400 },
       );
@@ -313,12 +321,67 @@ export async function POST(req: NextRequest) {
         {
           error: true,
           message: "Unsupported model selection",
+          data: null,
         },
         { status: 400 },
       );
     }
 
+    const requestIdempotencyKey = req.headers.get("Idempotency-Key")?.trim();
+    const idempotencyKey =
+      requestIdempotencyKey && requestIdempotencyKey.length >= 8
+        ? requestIdempotencyKey
+        : (body.idempotencyKey ?? crypto.randomUUID());
+
+    const project = await prisma.project.findUnique({
+      where: {
+        id: body.projectId,
+        userId: authContext.appUserId,
+      },
+      select: {
+        id: true,
+        status: true,
+      },
+    });
+
+    if (!project) {
+      return NextResponse.json(
+        {
+          error: true,
+          message: "Project not found",
+          data: null,
+        },
+        { status: 404 },
+      );
+    }
+
+    const duplicateGeneration = await prisma.generation.findUnique({
+      where: { idempotencyKey },
+      select: {
+        id: true,
+        projectId: true,
+        status: true,
+      },
+    });
+
+    if (duplicateGeneration) {
+      return NextResponse.json(
+        {
+          error: true,
+          code: "DUPLICATE_GENERATION_REQUEST",
+          message: "Duplicate generation request rejected by idempotency key",
+          data: {
+            generationId: duplicateGeneration.id,
+            status: duplicateGeneration.status,
+          },
+        },
+        { status: 409 },
+      );
+    }
+
     const requestedPlatform = normalizePlatform(body.platform);
+    const prompt = body.prompt.trim();
+
     const designContext = await buildDesignContext({
       prompt,
       platform: requestedPlatform,
@@ -329,6 +392,7 @@ export async function POST(req: NextRequest) {
       designContext,
     });
     const designContextText = toDesignContextText(designContext);
+
     const stage1ModelPriority = buildModelPriority(
       preferredModel,
       STAGE1_MODELS,
@@ -352,9 +416,10 @@ export async function POST(req: NextRequest) {
       writer.write(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
 
     (async () => {
+      let generationId: string | null = null;
+      const persistedScreens: PersistedGenerationScreen[] = [];
+
       try {
-        // Stage 1 — structured spec extraction (non-streaming)
-        // generateText = wait for full response, no stream
         logger.info("Starting Stage 1: Spec Extraction");
 
         const { text: rawSpec } = await generateTextWithFallback({
@@ -370,12 +435,39 @@ export async function POST(req: NextRequest) {
           coerceSpec(rawParsedSpec, requestedPlatform),
           enhancedPrompt,
         );
-        logger.info("Stage 1 complete");
+
+        const requestedModelForPersistence =
+          preferredModel ?? stage3ModelPriority[0];
+
+        const createdGeneration = await prisma.$transaction(async (tx) => {
+          const generation = await tx.generation.create({
+            data: {
+              projectId: project.id,
+              prompt: enhancedPrompt,
+              model: requestedModelForPersistence,
+              platform: toPrismaPlatform(requestedPlatform),
+              spec: spec as any,
+              status: "RUNNING",
+              idempotencyKey,
+            },
+            select: { id: true },
+          });
+
+          await tx.project.update({
+            where: { id: project.id },
+            data: { status: "GENERATING" },
+          });
+
+          return generation;
+        });
+
+        generationId = createdGeneration.id;
+
+        await write({ type: "generation_id", generationId });
         await write({ type: "design_context", designContext });
         await write({ type: "spec", spec });
 
-        // Stage 2 — component planner (non-streaming)
-        logger.info("Starting Stage 2: Component Planner");
+        logger.info("Stage 2: Component Planner");
         const { text: rawTree } = await generateTextWithFallback({
           stage: "Stage 2 Component Planner",
           models: stage2ModelPriority,
@@ -384,21 +476,34 @@ export async function POST(req: NextRequest) {
           prompt: `${requestedPlatform}Spec: ${JSON.stringify(spec)}\n${designContextText}`,
         });
         const tree = parseJsonStrict<ComponentTreeNode[]>(rawTree);
-        logger.info("Stage 2 complete");
         await write({ type: "tree", tree });
 
-        // Stage 3 — code synthesis per screen (streaming)
-        logger.info("Starting Stage 3: Code Synthesis");
-        for (const screen of spec.screens) {
+        logger.info("Stage 3: Code Synthesis");
+        const screensWithDims = spec.screens.map((screenName) => ({
+          name: screenName,
+          ...getInitialDimensionsForPlatform(screenName, requestedPlatform),
+        }));
+        const positions = getGenerationLayout([], screensWithDims);
+
+        for (const [index, screen] of spec.screens.entries()) {
           await write({ type: "screen_start", screen });
+
+          const position = positions[index] ?? {
+            x: 100 + index * 40,
+            y: 100 + index * 40,
+          };
+          const dimensions = screensWithDims[index] ?? { w: 1200, h: 800 };
+          const frameId = crypto.randomUUID();
 
           let screenGenerated = false;
           let streamErr: unknown = null;
+          let finalCode = "";
 
           for (let i = 0; i < stage3ModelPriority.length; i++) {
             const candidateModel = stage3ModelPriority[i];
             try {
               if (i > 0) {
+                finalCode = "";
                 await write({
                   type: "screen_reset",
                   screen,
@@ -422,15 +527,10 @@ export async function POST(req: NextRequest) {
                 temperature: 0.2,
               });
 
-              logger.info(
-                "Awaiting stream of code chunks for screen: ",
-                screen,
-              );
-
               for await (const token of result.textStream) {
+                finalCode += token;
                 await write({ type: "code_chunk", screen, token });
               }
-              // logger.info("Result output: ", await result.output);
 
               screenGenerated = true;
               break;
@@ -444,19 +544,93 @@ export async function POST(req: NextRequest) {
           }
 
           if (!screenGenerated) {
+            persistedScreens.push({
+              id: frameId,
+              state: "error",
+              x: position.x,
+              y: position.y,
+              w: dimensions.w,
+              h: dimensions.h,
+              screenName: screen,
+              content: finalCode,
+              editedContent: null,
+              error: `All stage 3 models failed: ${String(streamErr)}`,
+            });
+
             await write({ type: "screen_done", screen });
             throw new Error(
               `All stage 3 models failed for ${screen}: ${String(streamErr)}`,
             );
           }
 
+          persistedScreens.push({
+            id: frameId,
+            state: finalCode.trim() ? "done" : "error",
+            x: position.x,
+            y: position.y,
+            w: dimensions.w,
+            h: dimensions.h,
+            screenName: screen,
+            content: finalCode,
+            editedContent: null,
+            error: finalCode.trim()
+              ? null
+              : "Generation ended before this screen completed.",
+          });
+
           await write({ type: "screen_done", screen });
         }
 
-        logger.info("Generation complete");
+        if (generationId) {
+          await prisma.$transaction([
+            prisma.generation.update({
+              where: { id: generationId },
+              data: {
+                screens: persistedScreens as unknown as Prisma.InputJsonValue,
+                status: "COMPLETED",
+                terminalAt: new Date(),
+                errorMessage: null,
+                errorMeta: Prisma.JsonNull,
+              },
+            }),
+            prisma.project.update({
+              where: { id: project.id },
+              data: { status: "ACTIVE" },
+            }),
+          ]);
+        }
+
+        logger.info("Generation complete", {
+          generationId,
+          projectId: project.id,
+        });
         await write({ type: "done" });
       } catch (err) {
-        await write({ type: "error", message: String(err) });
+        const message = err instanceof Error ? err.message : String(err);
+
+        if (generationId) {
+          await prisma.$transaction([
+            prisma.generation.update({
+              where: { id: generationId },
+              data: {
+                screens: persistedScreens as unknown as Prisma.InputJsonValue,
+                status: "FAILED",
+                terminalAt: new Date(),
+                errorMessage: message,
+                errorMeta: {
+                  source: "api/generate",
+                  stage: "stream",
+                } as unknown as Prisma.InputJsonValue,
+              },
+            }),
+            prisma.project.update({
+              where: { id: project.id },
+              data: { status: "ACTIVE" },
+            }),
+          ]);
+        }
+
+        await write({ type: "error", message });
       } finally {
         await writer.close();
       }

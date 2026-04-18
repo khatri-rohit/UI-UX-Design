@@ -1,10 +1,142 @@
-import { Prisma } from "@/app/generated/prisma/client";
-import { isCanvasSnapshotV1 } from "@/lib/canvas-state";
+import {
+  GenerationPlatform as PrismaGenerationPlatform,
+  GenerationStatus as PrismaGenerationStatus,
+  Prisma,
+} from "@/app/generated/prisma/client";
+import {
+  ProjectDetail,
+  ProjectGeneration,
+  ProjectPatchResult,
+  ProjectStatus,
+} from "@/lib/api/types";
+import {
+  CanvasFrameSnapshot,
+  CanvasSnapshotV1,
+  CanvasStateMetadataV1,
+  PersistedGenerationScreen,
+  isCanvasSnapshotV1,
+  isCanvasStateMetadataV1,
+  toCanvasStateMetadata,
+} from "@/lib/canvas-state";
 import { isAuthError, requireAuthContext } from "@/lib/get-auth";
 import prisma from "@/lib/prisma";
+import {
+  persistedGenerationScreenSchema,
+  projectPatchBodySchema,
+  toValidationIssues,
+  webAppSpecSchema,
+} from "@/lib/schemas/studio";
+import { GenerationPlatform } from "@/lib/types";
 import { NextResponse, NextRequest } from "next/server";
+import { z } from "zod";
 
 const CANVAS_SNAPSHOT_CLOCK_SKEW_MS = 2000;
+const GENERATION_NOT_FOUND = "GENERATION_NOT_FOUND";
+
+const generationSelect = {
+  id: true,
+  model: true,
+  platform: true,
+  spec: true,
+  screens: true,
+  status: true,
+  terminalAt: true,
+  errorMessage: true,
+  createdAt: true,
+  updatedAt: true,
+} satisfies Prisma.GenerationSelect;
+
+type GenerationRecord = {
+  id: string;
+  model: string;
+  platform: PrismaGenerationPlatform;
+  spec: Prisma.JsonValue;
+  screens: Prisma.JsonValue | null;
+  status: PrismaGenerationStatus;
+  terminalAt: Date | null;
+  errorMessage: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+function toApiPlatform(platform: PrismaGenerationPlatform): GenerationPlatform {
+  return platform === "MOBILE" ? "mobile" : "web";
+}
+
+function normalizeCanvasMetadata(
+  value: Prisma.JsonValue | null,
+): CanvasStateMetadataV1 | null {
+  const normalizedCandidate = value as unknown;
+
+  if (isCanvasStateMetadataV1(normalizedCandidate)) {
+    return {
+      ...normalizedCandidate,
+      selectedGenerationId: normalizedCandidate.selectedGenerationId ?? null,
+    };
+  }
+
+  if (isCanvasSnapshotV1(normalizedCandidate)) {
+    return toCanvasStateMetadata(normalizedCandidate);
+  }
+
+  return null;
+}
+
+function parseGenerationScreens(
+  value: Prisma.JsonValue | null,
+): PersistedGenerationScreen[] {
+  const parsed = z.array(persistedGenerationScreenSchema).safeParse(value);
+  return parsed.success ? parsed.data : [];
+}
+
+function toProjectGeneration(record: GenerationRecord): ProjectGeneration {
+  const parsedSpec = webAppSpecSchema.safeParse(record.spec);
+
+  return {
+    generationId: record.id,
+    model: record.model,
+    platform: toApiPlatform(record.platform),
+    spec: parsedSpec.success ? parsedSpec.data : null,
+    screens: parseGenerationScreens(record.screens),
+    status: record.status,
+    terminalAt: record.terminalAt ? record.terminalAt.toISOString() : null,
+    errorMessage: record.errorMessage,
+    createdAt: record.createdAt.toISOString(),
+    updatedAt: record.updatedAt.toISOString(),
+  };
+}
+
+function toFramesFromGenerations(
+  generations: ProjectGeneration[],
+): CanvasFrameSnapshot[] {
+  return generations.flatMap((generation) =>
+    generation.screens.map((screen) => ({
+      ...screen,
+      generationId: generation.generationId,
+      platform: generation.platform,
+    })),
+  );
+}
+
+function stripGenerationFrames(
+  frames: CanvasFrameSnapshot[],
+  generationId: string,
+): PersistedGenerationScreen[] {
+  return frames
+    .filter((frame) => frame.generationId === generationId)
+    .map((frame) => ({
+      id: frame.id,
+      state: frame.state,
+      x: frame.x,
+      y: frame.y,
+      w: frame.w,
+      h: frame.h,
+      screenName: frame.screenName,
+      content: frame.content,
+      editedContent: frame.editedContent,
+      error: frame.error,
+    }));
+}
 
 export async function GET(
   req: NextRequest,
@@ -41,6 +173,12 @@ export async function GET(
 
     const project = await prisma.project.findUnique({
       where: { id, userId: authContext.appUserId },
+      include: {
+        generations: {
+          orderBy: { createdAt: "asc" },
+          select: generationSelect,
+        },
+      },
     });
 
     if (!project) {
@@ -54,21 +192,26 @@ export async function GET(
       );
     }
 
-    const normalizedCanvasState = isCanvasSnapshotV1(project.canvasState)
-      ? project.canvasState
-      : null;
+    const generations = project.generations.map((generation) =>
+      toProjectGeneration(generation as GenerationRecord),
+    );
+    const normalizedCanvasState = normalizeCanvasMetadata(project.canvasState);
+
+    const data: ProjectDetail = {
+      id: project.id,
+      title: project.title ?? "Untitled Project",
+      status: project.status as ProjectStatus,
+      initialPrompt: project.initialPrompt,
+      canvasState: normalizedCanvasState,
+      frames: toFramesFromGenerations(generations),
+      generations,
+    };
 
     return NextResponse.json(
       {
         error: false,
         message: "Project fetched successfully",
-        data: {
-          id: project.id,
-          title: project.title ?? "Untitled Project",
-          status: project.status,
-          initialPrompt: project.initialPrompt,
-          canvasState: normalizedCanvasState,
-        },
+        data,
       },
       { status: 200 },
     );
@@ -83,6 +226,7 @@ export async function GET(
         { status: error.status },
       );
     }
+
     return NextResponse.json(
       {
         error: true,
@@ -93,8 +237,6 @@ export async function GET(
     );
   }
 }
-const ProjectStatus = ["PENDING", "GENERATING", "ACTIVE", "ARCHIVED"] as const;
-type ProjectStatusValue = (typeof ProjectStatus)[number];
 
 export async function PATCH(
   req: NextRequest,
@@ -129,16 +271,9 @@ export async function PATCH(
       );
     }
 
-    let body: {
-      status?: unknown;
-      canvasState?: unknown;
-    };
-
+    let rawBody: unknown;
     try {
-      body = (await req.json()) as {
-        status?: unknown;
-        canvasState?: unknown;
-      };
+      rawBody = await req.json();
     } catch {
       return NextResponse.json(
         {
@@ -150,58 +285,31 @@ export async function PATCH(
       );
     }
 
-    const { status, canvasState } = body;
-
-    if (status === undefined && canvasState === undefined) {
+    const parsedBody = projectPatchBodySchema.safeParse(rawBody);
+    if (!parsedBody.success) {
       return NextResponse.json(
         {
           error: true,
-          message: "Either status or canvasState must be provided",
+          code: "VALIDATION_ERROR",
+          message: "Invalid project patch payload",
+          issues: toValidationIssues(parsedBody.error),
           data: null,
         },
         { status: 400 },
       );
     }
 
-    if (
-      status !== undefined &&
-      (typeof status !== "string" ||
-        !ProjectStatus.includes(status as ProjectStatusValue))
-    ) {
-      return NextResponse.json(
-        {
-          error: true,
-          message: "Invalid status value",
-          data: null,
-        },
-        { status: 400 },
-      );
-    }
-
-    if (
-      canvasState !== undefined &&
-      canvasState !== null &&
-      !isCanvasSnapshotV1(canvasState)
-    ) {
-      return NextResponse.json(
-        {
-          error: true,
-          message: "Invalid canvasState payload",
-          data: null,
-        },
-        { status: 400 },
-      );
-    }
-
-    const canvasStateSnapshot =
-      canvasState !== undefined &&
-      canvasState !== null &&
-      isCanvasSnapshotV1(canvasState)
-        ? canvasState
-        : null;
+    const { status, canvasState, generationId } = parsedBody.data;
 
     const project = await prisma.project.findUnique({
       where: { id, userId: authContext.appUserId },
+      select: {
+        id: true,
+        title: true,
+        initialPrompt: true,
+        status: true,
+        canvasState: true,
+      },
     });
 
     if (!project) {
@@ -215,8 +323,10 @@ export async function PATCH(
       );
     }
 
-    if (canvasStateSnapshot) {
-      const incomingSavedAtMs = Date.parse(canvasStateSnapshot.savedAt);
+    const persistedCanvasState = normalizeCanvasMetadata(project.canvasState);
+
+    if (canvasState) {
+      const incomingSavedAtMs = Date.parse(canvasState.savedAt);
       if (Number.isNaN(incomingSavedAtMs)) {
         return NextResponse.json(
           {
@@ -228,8 +338,8 @@ export async function PATCH(
         );
       }
 
-      if (isCanvasSnapshotV1(project.canvasState)) {
-        const persistedSavedAtMs = Date.parse(project.canvasState.savedAt);
+      if (persistedCanvasState) {
+        const persistedSavedAtMs = Date.parse(persistedCanvasState.savedAt);
         if (
           !Number.isNaN(persistedSavedAtMs) &&
           incomingSavedAtMs + CANVAS_SNAPSHOT_CLOCK_SKEW_MS <=
@@ -248,36 +358,113 @@ export async function PATCH(
       }
     }
 
-    const updateData: Prisma.ProjectUpdateInput = {};
-
-    if (status !== undefined) {
-      updateData.status = status as ProjectStatusValue;
-    }
-
+    let canvasStateForProject: CanvasStateMetadataV1 | null | undefined;
     if (canvasState !== undefined) {
-      updateData.canvasState =
-        canvasState === null
-          ? Prisma.JsonNull
-          : (canvasStateSnapshot as unknown as Prisma.InputJsonValue);
+      canvasStateForProject = canvasState
+        ? toCanvasStateMetadata({
+            ...canvasState,
+            selectedGenerationId: canvasState.selectedGenerationId ?? null,
+          } as CanvasSnapshotV1)
+        : null;
+
+      if (
+        canvasStateForProject &&
+        generationId &&
+        !canvasStateForProject.selectedGenerationId
+      ) {
+        canvasStateForProject = {
+          ...canvasStateForProject,
+          selectedGenerationId: generationId,
+        };
+      }
     }
 
-    const updatedProject = await prisma.project.update({
-      where: { id },
-      data: updateData,
-      select: {
-        status: true,
-        canvasState: true,
+    const generationScreensPayload =
+      generationId && canvasState
+        ? stripGenerationFrames(canvasState.frames, generationId)
+        : undefined;
+
+    const { updatedProject, updatedGeneration } = await prisma.$transaction(
+      async (tx) => {
+        let updatedGenerationRecord: GenerationRecord | null = null;
+
+        if (generationId) {
+          const existingGeneration = await tx.generation.findFirst({
+            where: {
+              id: generationId,
+              projectId: project.id,
+            },
+            select: generationSelect,
+          });
+
+          if (!existingGeneration) {
+            throw new Error(GENERATION_NOT_FOUND);
+          }
+
+          if (generationScreensPayload !== undefined) {
+            updatedGenerationRecord = (await tx.generation.update({
+              where: { id: generationId },
+              data: {
+                screens:
+                  generationScreensPayload as unknown as Prisma.InputJsonValue,
+              },
+              select: generationSelect,
+            })) as GenerationRecord;
+          } else {
+            updatedGenerationRecord = existingGeneration as GenerationRecord;
+          }
+        }
+
+        const updateData: Prisma.ProjectUpdateInput = {};
+
+        if (status !== undefined) {
+          updateData.status = status;
+        }
+
+        if (canvasStateForProject !== undefined) {
+          updateData.canvasState =
+            canvasStateForProject === null
+              ? Prisma.JsonNull
+              : (canvasStateForProject as unknown as Prisma.InputJsonValue);
+        }
+
+        const projectRecord = await tx.project.update({
+          where: { id: project.id },
+          data: updateData,
+          select: {
+            id: true,
+            title: true,
+            initialPrompt: true,
+            status: true,
+            canvasState: true,
+          },
+        });
+
+        return {
+          updatedProject: projectRecord,
+          updatedGeneration: updatedGenerationRecord,
+        };
       },
-    });
+    );
+
+    const responseData: ProjectPatchResult = {
+      project: {
+        id: updatedProject.id,
+        title: updatedProject.title ?? "Untitled Project",
+        initialPrompt: updatedProject.initialPrompt,
+        status: updatedProject.status as ProjectStatus,
+        canvasState: normalizeCanvasMetadata(updatedProject.canvasState),
+      },
+      generation: updatedGeneration
+        ? toProjectGeneration(updatedGeneration)
+        : null,
+    };
 
     return NextResponse.json(
       {
         error: false,
         message: "Project updated successfully",
-        data: {
-          status: updatedProject.status,
-          canvasState: updatedProject.canvasState,
-        },
+        data: responseData,
       },
       { status: 200 },
     );
@@ -292,10 +479,22 @@ export async function PATCH(
         { status: error.status },
       );
     }
+
+    if (error instanceof Error && error.message === GENERATION_NOT_FOUND) {
+      return NextResponse.json(
+        {
+          error: true,
+          message: "Generation not found for this project",
+          data: null,
+        },
+        { status: 404 },
+      );
+    }
+
     return NextResponse.json(
       {
         error: true,
-        message: "An error occurred while updating the project status",
+        message: "An error occurred while updating the project",
         data: null,
       },
       { status: 500 },
@@ -350,6 +549,7 @@ export async function DELETE(
         { status: 404 },
       );
     }
+
     await prisma.project.delete({
       where: { id },
     });
@@ -375,6 +575,7 @@ export async function DELETE(
         { status: error.status },
       );
     }
+
     return NextResponse.json(
       {
         error: true,
