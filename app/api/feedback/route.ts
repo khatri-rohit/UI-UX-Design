@@ -1,34 +1,38 @@
 import { NextRequest } from "next/server";
-import { Client } from "@upstash/qstash";
 import logger from "@/lib/logger";
-import { feedbackBodySchema, toValidationIssues } from "@/lib/schemas/studio";
+import { sendFeedbackEmail } from "@/lib/feedback-mail";
+import {
+  feedbackFormBodySchema,
+  toValidationIssues,
+} from "@/lib/schemas/studio";
 
-const client = new Client({
-  token: process.env.QSTASH_TOKEN,
-  retry: {
-    retries: 3,
-    backoff: (retry_count) => 2 ** retry_count * 20,
-  },
-});
+export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
   try {
-    let rawBody: unknown;
+    let formData: FormData;
     try {
-      rawBody = await request.json();
+      formData = await request.formData();
     } catch {
       return new Response(
-        JSON.stringify({ error: "Request body must be valid JSON" }),
+        JSON.stringify({
+          error:
+            "Request must be multipart form-data with feedback and optional attachments",
+        }),
         { status: 400, headers: { "Content-Type": "application/json" } },
       );
     }
 
-    const parsedBody = feedbackBodySchema.safeParse(rawBody);
+    const parsedBody = feedbackFormBodySchema.safeParse({
+      feedback: formData.get("feedback"),
+      attachments: formData.getAll("attachments"),
+    });
+
     if (!parsedBody.success) {
       logger.error("Validation error:", { error: parsedBody.error });
       return new Response(
         JSON.stringify({
-          error: "Invalid feedback payload",
+          error: "Invalid feedback form payload",
           code: "VALIDATION_ERROR",
           issues: toValidationIssues(parsedBody.error),
         }),
@@ -36,14 +40,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { feedback } = parsedBody.data;
+    const { feedback, attachments } = parsedBody.data;
 
-    // Send email with feedback content through background job
-    const result = await client.publishJSON({
-      url: `${process.env.BACKGROUND_TASK_QUEUE_PUBLIC_URL}/api/background-jobs/send-feedback-email`,
-      body: { feedback },
+    const emailAttachments = await Promise.all(
+      attachments.map(async (attachmentFile) => ({
+        filename: attachmentFile.name || "attachment",
+        contentType: attachmentFile.type,
+        content: Buffer.from(await attachmentFile.arrayBuffer()),
+      })),
+    );
+
+    await sendFeedbackEmail({
+      feedback,
+      attachments: emailAttachments,
     });
-    logger.info("Published feedback email job to QStash", { result });
+    logger.info("Feedback email sent from /api/feedback", {
+      attachments: emailAttachments.length,
+    });
 
     return new Response(
       JSON.stringify({ success: true, message: "Feedback received" }),

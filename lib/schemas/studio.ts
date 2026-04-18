@@ -1,6 +1,60 @@
 import { z } from "zod";
+import {
+  FEEDBACK_ALLOWED_ATTACHMENT_MIME_TYPES,
+  FEEDBACK_MAX_ATTACHMENTS,
+  FEEDBACK_MAX_FILE_SIZE_BYTES,
+  FEEDBACK_MAX_TOTAL_ATTACHMENT_SIZE_BYTES,
+  formatBytes,
+} from "@/lib/feedback";
 
 const projectIdSchema = z.string().cuid();
+const feedbackAllowedAttachmentTypeSet: ReadonlySet<string> = new Set(
+  FEEDBACK_ALLOWED_ATTACHMENT_MIME_TYPES,
+);
+const feedbackTextSchema = z.string().trim().min(1).max(10000);
+
+const feedbackAttachmentFileSchema = z
+  .instanceof(File, { message: "Attachment must be a file" })
+  .refine((file) => file.size > 0, {
+    message: "Attachment must not be empty",
+  })
+  .refine((file) => file.size <= FEEDBACK_MAX_FILE_SIZE_BYTES, {
+    message: `Each attachment must be at most ${formatBytes(FEEDBACK_MAX_FILE_SIZE_BYTES)}`,
+  })
+  .refine((file) => feedbackAllowedAttachmentTypeSet.has(file.type), {
+    message: "Only image and video files are allowed",
+  });
+
+const feedbackQueuedAttachmentSchema = z.object({
+  filename: z.string().trim().min(1).max(255),
+  contentType: z
+    .string()
+    .trim()
+    .min(1)
+    .refine((value) => feedbackAllowedAttachmentTypeSet.has(value), {
+      message: "Unsupported attachment type",
+    }),
+  contentBase64: z.string().trim().min(1),
+  size: z.number().int().positive().max(FEEDBACK_MAX_FILE_SIZE_BYTES),
+});
+
+function addFeedbackAttachmentTotalSizeValidation(
+  attachments: Array<{ size: number }>,
+  ctx: z.RefinementCtx,
+) {
+  const totalAttachmentSize = attachments.reduce(
+    (sum, attachment) => sum + attachment.size,
+    0,
+  );
+
+  if (totalAttachmentSize > FEEDBACK_MAX_TOTAL_ATTACHMENT_SIZE_BYTES) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["attachments"],
+      message: `Total attachment size must be at most ${formatBytes(FEEDBACK_MAX_TOTAL_ATTACHMENT_SIZE_BYTES)}`,
+    });
+  }
+}
 
 const frameStateSchema = z.enum([
   "skeleton",
@@ -90,8 +144,38 @@ export const projectRouteParamsSchema = z.object({
 });
 
 export const feedbackBodySchema = z.object({
-  feedback: z.string().trim().min(1).max(10000),
+  feedback: feedbackTextSchema,
 });
+
+export const feedbackFormBodySchema = z
+  .object({
+    feedback: feedbackTextSchema,
+    attachments: z
+      .array(feedbackAttachmentFileSchema)
+      .max(FEEDBACK_MAX_ATTACHMENTS)
+      .default([]),
+  })
+  .superRefine((value, ctx) => {
+    addFeedbackAttachmentTotalSizeValidation(value.attachments, ctx);
+  });
+
+export const feedbackQueuedJobBodySchema = z
+  .object({
+    feedback: feedbackTextSchema,
+    attachments: z
+      .array(feedbackQueuedAttachmentSchema)
+      .max(FEEDBACK_MAX_ATTACHMENTS)
+      .default([]),
+  })
+  .superRefine((value, ctx) => {
+    addFeedbackAttachmentTotalSizeValidation(value.attachments, ctx);
+  });
+
+export type FeedbackQueuedAttachment = z.infer<
+  typeof feedbackQueuedAttachmentSchema
+>;
+
+export type FeedbackQueuedJobBody = z.infer<typeof feedbackQueuedJobBodySchema>;
 
 export const projectMetadataJobBodySchema = z.object({
   projectId: projectIdSchema.optional(),

@@ -1,17 +1,15 @@
 import { verifySignatureAppRouter } from "@upstash/qstash/nextjs";
-import nodemailer, { Transporter } from "nodemailer";
 import logger from "@/lib/logger";
-import { feedbackBodySchema, toValidationIssues } from "@/lib/schemas/studio";
-
-const transporter: Transporter = nodemailer.createTransport({
-  host: process.env.EMAIL_HOST,
-  port: 465,
-  secure: true, // true for 465, false for other ports
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-});
+import { sendFeedbackEmail } from "@/lib/feedback-mail";
+import {
+  FEEDBACK_MAX_FILE_SIZE_BYTES,
+  FEEDBACK_MAX_TOTAL_ATTACHMENT_SIZE_BYTES,
+  formatBytes,
+} from "@/lib/feedback";
+import {
+  feedbackQueuedJobBodySchema,
+  toValidationIssues,
+} from "@/lib/schemas/studio";
 
 export const POST = verifySignatureAppRouter(async (req: Request) => {
   try {
@@ -28,7 +26,7 @@ export const POST = verifySignatureAppRouter(async (req: Request) => {
       );
     }
 
-    const parsedBody = feedbackBodySchema.safeParse(rawBody);
+    const parsedBody = feedbackQueuedJobBodySchema.safeParse(rawBody);
     if (!parsedBody.success) {
       return new Response(
         JSON.stringify({
@@ -41,13 +39,52 @@ export const POST = verifySignatureAppRouter(async (req: Request) => {
       );
     }
 
-    const { feedback } = parsedBody.data;
+    const { feedback, attachments } = parsedBody.data;
+    const decodedAttachments = attachments.map((attachment) => {
+      const content = Buffer.from(attachment.contentBase64, "base64");
+      return {
+        filename: attachment.filename,
+        contentType: attachment.contentType,
+        content,
+      };
+    });
 
-    await transporter.sendMail({
-      from: `"UI/UX Builder Feedback" <${process.env.EMAIL_USER}>`,
-      to: process.env.FEEDBACK_RECEIVER_EMAIL,
-      subject: "New Feedback Received",
-      text: feedback,
+    const invalidAttachment = decodedAttachments.find(
+      (attachment) =>
+        attachment.content.length <= 0 ||
+        attachment.content.length > FEEDBACK_MAX_FILE_SIZE_BYTES,
+    );
+
+    if (invalidAttachment) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          code: "VALIDATION_ERROR",
+          message: `Each attachment must be between 1 byte and ${formatBytes(FEEDBACK_MAX_FILE_SIZE_BYTES)}`,
+        }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
+    const totalSize = decodedAttachments.reduce(
+      (sum, attachment) => sum + attachment.content.length,
+      0,
+    );
+
+    if (totalSize > FEEDBACK_MAX_TOTAL_ATTACHMENT_SIZE_BYTES) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          code: "VALIDATION_ERROR",
+          message: `Total attachment size must be at most ${formatBytes(FEEDBACK_MAX_TOTAL_ATTACHMENT_SIZE_BYTES)}`,
+        }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
+    await sendFeedbackEmail({
+      feedback,
+      attachments: decodedAttachments,
     });
 
     logger.info("Feedback email sent successfully");
