@@ -61,6 +61,7 @@ export function usePointerMode({ onModeChange }: UsePointerModeOptions = {}) {
     activeFrameId,
     selectedFrameId,
     setSelectedFrameId,
+    setActiveFrameId,
     enterFrame,
     exitFrame,
     openEditor,

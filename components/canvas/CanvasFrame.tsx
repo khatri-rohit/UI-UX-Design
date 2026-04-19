@@ -24,6 +24,7 @@ const MIN_MOBILE_W = 320;
 const MAX_MOBILE_W = 430;
 const MIN_MOBILE_H = 560;
 const MAX_MOBILE_H = 2200;
+const DRAG_ACTIVATION_THRESHOLD_PX = 3;
 
 type InteractionState =
   | {
@@ -32,6 +33,7 @@ type InteractionState =
       startClientY: number;
       startX: number;
       startY: number;
+      hasMoved: boolean;
     }
   | {
       kind: "resize";
@@ -83,6 +85,7 @@ export const CanvasFrame = memo(function CanvasFrame({
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const interactionRef = useRef<InteractionState | null>(null);
   const contextMenuOpenRef = useRef(false);
+  const isSpacePressedRef = useRef(false);
 
   const safeScale = Math.max(scale, 0.001);
   const activeContent = editedContent ?? content;
@@ -133,6 +136,21 @@ export const CanvasFrame = memo(function CanvasFrame({
       const deltaY = (event.clientY - interaction.startClientY) / safeScale;
 
       if (interaction.kind === "drag") {
+        if (!interaction.hasMoved) {
+          const movedEnough =
+            Math.abs(deltaX) >= DRAG_ACTIVATION_THRESHOLD_PX ||
+            Math.abs(deltaY) >= DRAG_ACTIVATION_THRESHOLD_PX;
+
+          if (!movedEnough) {
+            return;
+          }
+
+          interactionRef.current = {
+            ...interaction,
+            hasMoved: true,
+          };
+        }
+
         onMove(id, interaction.startX + deltaX, interaction.startY + deltaY);
         return;
       }
@@ -154,9 +172,38 @@ export const CanvasFrame = memo(function CanvasFrame({
     window.removeEventListener("pointermove", handleWindowPointerMove);
   }, [handleWindowPointerMove]);
 
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.code === "Space") {
+        isSpacePressedRef.current = true;
+      }
+    };
+
+    const handleKeyUp = (event: KeyboardEvent) => {
+      if (event.code === "Space") {
+        isSpacePressedRef.current = false;
+      }
+    };
+
+    const handleBlur = () => {
+      isSpacePressedRef.current = false;
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    window.addEventListener("blur", handleBlur);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+      window.removeEventListener("blur", handleBlur);
+    };
+  }, []);
+
   const startDrag = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
       if (isActive || event.button !== 0) return;
+      if (isSpacePressedRef.current) return;
 
       event.preventDefault();
       event.stopPropagation();
@@ -168,6 +215,7 @@ export const CanvasFrame = memo(function CanvasFrame({
         startClientY: event.clientY,
         startX: x,
         startY: y,
+        hasMoved: false,
       };
 
       window.addEventListener("pointermove", handleWindowPointerMove);
@@ -182,6 +230,7 @@ export const CanvasFrame = memo(function CanvasFrame({
   const startResize = useCallback(
     (event: React.PointerEvent<HTMLButtonElement>) => {
       if (isActive || event.button !== 0) return;
+      if (isSpacePressedRef.current) return;
 
       event.preventDefault();
       event.stopPropagation();
@@ -420,6 +469,9 @@ export const CanvasFrame = memo(function CanvasFrame({
               onClick={(event) => {
                 event.stopPropagation();
                 onSelect(id);
+                if (state === "done") {
+                  onActivate(id);
+                }
               }}
               onDoubleClick={(event) => {
                 event.stopPropagation();

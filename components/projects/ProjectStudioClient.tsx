@@ -1928,14 +1928,22 @@ const ProjectStudioClient = ({ projectId }: ProjectStudioClientProps) => {
           onFrameExit={exitFrame}
           onTransformChange={handleTransformChange}
         >
-          {frameList.map((frame) => (
-            <SandpackProvider key={frame.id}>
+          <SandpackProvider>
+            {frameList.map((frame) => (
               <CanvasFrame
                 {...frame}
+                key={frame.id}
                 scale={canvasTransform.k}
                 isActive={activeFrameId === frame.id}
                 isSelected={selectedFrameId === frame.id}
-                onSelect={setSelectedFrameId}
+                onSelect={(id) => {
+                  setSelectedFrameId(id);
+                  selectedFrameIdRef.current = id;
+                  const frame = framesRef.current.get(id);
+                  if (frame) {
+                    setStudioSelectedGenerationId(frame.generationId);
+                  }
+                }}
                 onActivate={(id) => {
                   setSelectedFrameId(id);
                   enterFrame(id);
@@ -1943,15 +1951,6 @@ const ProjectStudioClient = ({ projectId }: ProjectStudioClientProps) => {
                   activeFrameIdRef.current = id;
                   const frame = framesRef.current.get(id);
                   if (frame) {
-                    canvasRef.current?.zoomToRect(
-                      {
-                        x: frame.x,
-                        y: frame.y,
-                        w: frame.w,
-                        h: frame.h,
-                      },
-                      48,
-                    );
                     setStudioSelectedGenerationId(frame.generationId);
                   }
                   scheduleSnapshotPersist();
@@ -1960,8 +1959,8 @@ const ProjectStudioClient = ({ projectId }: ProjectStudioClientProps) => {
                 onResize={handleResizeFrame}
                 handleFrame={handleFrame}
               />
-            </SandpackProvider>
-          ))}
+            ))}
+          </SandpackProvider>
         </InfiniteCanvas>
       </div>
 
