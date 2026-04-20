@@ -60,10 +60,7 @@ export async function POST(req: NextRequest) {
         );
       }
     } catch (rateLimitError) {
-      logger.error(
-        `projectWriteRatelimit.limit failed for appUserId=${authContext.appUserId}`,
-        rateLimitError,
-      );
+      logger.error("projectWriteRatelimit.limit failed ", rateLimitError);
 
       return NextResponse.json(
         {

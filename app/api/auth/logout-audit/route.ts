@@ -14,6 +14,16 @@ export async function POST(req: Request) {
       allowPendingSession: true,
     });
 
+    if (!authContext.appUserId) {
+      return NextResponse.json(
+        {
+          error: true,
+          message: "Unauthorized: Missing user ID in auth context",
+        },
+        { status: 401 },
+      );
+    }
+
     const { success, limit, remaining, reset } = await apiRatelimit.limit(
       `logout-audit:${authContext.appUserId}`,
     );

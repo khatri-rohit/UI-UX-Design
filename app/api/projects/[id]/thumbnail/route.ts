@@ -75,10 +75,7 @@ export async function PATCH(
         );
       }
     } catch (rateLimitError) {
-      logger.error(
-        `projectWriteRatelimit.limit failed for appUserId=${authContext.appUserId}`,
-        rateLimitError,
-      );
+      logger.error("projectWriteRatelimit.limit failed ", rateLimitError);
 
       return NextResponse.json(
         {

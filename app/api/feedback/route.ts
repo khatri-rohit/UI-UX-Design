@@ -56,10 +56,7 @@ export async function POST(request: NextRequest) {
         );
       }
     } catch (rateLimitError) {
-      logger.error(
-        `feedbackRatelimit.limit failed for appUserId=${authContext.appUserId}`,
-        rateLimitError,
-      );
+      logger.error("feedbackRatelimit.limit failed ", rateLimitError);
 
       return new Response(
         JSON.stringify({

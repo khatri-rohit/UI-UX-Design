@@ -64,10 +64,7 @@ async function enforceProjectWriteRatelimit(
 
     return null;
   } catch (rateLimitError) {
-    logger.error(
-      `projectWriteRatelimit.limit failed for appUserId=${appUserId}`,
-      rateLimitError,
-    );
+    logger.error("projectWriteRatelimit.limit failed ", rateLimitError);
 
     return NextResponse.json(
       {
