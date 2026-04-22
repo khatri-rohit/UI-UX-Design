@@ -426,7 +426,7 @@ export async function POST(req: NextRequest) {
       try {
         logger.info("Starting Stage 1: Spec Extraction");
 
-        const { text: rawSpec } = await generateTextWithFallback({
+        const { text: rawSpec, usage } = await generateTextWithFallback({
           stage: "Stage 1 Spec Extraction",
           models: stage1ModelPriority,
           ollama,
@@ -439,7 +439,7 @@ export async function POST(req: NextRequest) {
           coerceSpec(rawParsedSpec, requestedPlatform),
           enhancedPrompt,
         );
-
+        logger.info("Stage 1 Spec Extraction complete", { usage });
         const requestedModelForPersistence =
           preferredModel ?? stage3ModelPriority[0];
 
@@ -472,16 +472,17 @@ export async function POST(req: NextRequest) {
         await write({ type: "spec", spec });
 
         logger.info("Stage 2: Component Planner");
-        const { text: rawTree } = await generateTextWithFallback({
-          stage: "Stage 2 Component Planner",
-          models: stage2ModelPriority,
-          ollama,
-          system: STAGE2_SYSTEM,
-          prompt: `${requestedPlatform}Spec: ${JSON.stringify(spec)}\n${designContextText}`,
-        });
+        const { text: rawTree, usage: treeUsage } =
+          await generateTextWithFallback({
+            stage: "Stage 2 Component Planner",
+            models: stage2ModelPriority,
+            ollama,
+            system: STAGE2_SYSTEM,
+            prompt: `${requestedPlatform}Spec: ${JSON.stringify(spec)}\n${designContextText}`,
+          });
         const tree = parseJsonStrict<ComponentTreeNode[]>(rawTree);
         await write({ type: "tree", tree });
-
+        logger.info("Stage 2 Component Planner complete", { usage: treeUsage });
         if (generationId) {
           await prisma.generation.update({
             where: { id: generationId },
@@ -525,8 +526,8 @@ export async function POST(req: NextRequest) {
               logger.info(
                 `Stage 3 screen '${screen}' via model: ${candidateModel}`,
               );
-              const result = streamText({
-                model: ollama(candidateModel),
+              const { usage, textStream } = streamText({
+                model: ollama("kimi-k2-thinking:cloud"),
                 system: STAGE3_SYSTEM,
                 prompt: buildScreenPrompt(
                   spec,
@@ -538,11 +539,11 @@ export async function POST(req: NextRequest) {
                 temperature: 0.2,
               });
 
-              for await (const token of result.textStream) {
+              for await (const token of textStream) {
                 finalCode += token;
                 await write({ type: "code_chunk", screen, token });
               }
-
+              logger.info("Response stream complete for screen", { usage });
               screenGenerated = true;
               break;
             } catch (err) {

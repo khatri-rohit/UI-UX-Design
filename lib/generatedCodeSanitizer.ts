@@ -6,6 +6,10 @@ const ALLOWED_IMPORT_PACKAGES = new Set([
   "recharts",
   "lucide-react",
   "clsx",
+  "tailwind-merge",
+  "date-fns",
+  "dayjs",
+  "lodash",
 ]);
 
 const CODE_START_RE =
