@@ -53,6 +53,7 @@ interface CanvasFrameProps extends CanvasFrameData {
   onResize: (id: string, w: number, h: number) => void;
   handleFrame: (id: string) => void;
   handleSelectContext?: (frameId: string) => void;
+  handleDelete: (id: string) => void;
 }
 
 function clamp(value: number, min: number, max: number) {
@@ -78,8 +79,9 @@ export const CanvasFrame = memo(function CanvasFrame({
   onActivate,
   onMove,
   onResize,
-  handleFrame,
   handleSelectContext,
+  handleFrame,
+  handleDelete,
 }: CanvasFrameProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -509,6 +511,9 @@ export const CanvasFrame = memo(function CanvasFrame({
       <ContextMenuContent onEscapeKeyDown={(event) => event.stopPropagation()}>
         <ContextMenuItem onSelect={() => handleFrame(id)}>
           Regenerate
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={() => handleDelete(id)}>
+          Delete
         </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>

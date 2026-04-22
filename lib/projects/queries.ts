@@ -298,7 +298,7 @@ export function useProjectCanvasStateUpdateMutation(
   });
 }
 
-// -- Update prject thumbnail after generation
+// -- Update project thumbnail after generation
 export async function updateProjectThumbnail(id: string, thumbnail: Blob) {
   const body = new FormData();
   body.append("thumbnail", thumbnail, "thumbnail.png");
@@ -326,6 +326,64 @@ export function useProjectThumbnailUpdateMutation() {
             ? { ...project, thumbnailUrl: data.thumbnailUrl }
             : project,
         ),
+      );
+    },
+  });
+}
+
+// -- Delete perticular screen from generation
+export async function deleteGenerationScreen(
+  projectId: string,
+  generationId: string,
+  screenId: string,
+) {
+  return requestApi(
+    `/api/projects/${projectId}/generations/${generationId}/screens/${screenId}`,
+    {
+      method: "DELETE",
+    },
+  );
+}
+
+export function useDeleteGenerationScreenMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      projectId,
+      generationId,
+      screenId,
+    }: {
+      projectId: string;
+      generationId: string;
+      screenId: string;
+    }) => deleteGenerationScreen(projectId, generationId, screenId),
+    onSuccess: (_data, { projectId, generationId, screenId }) => {
+      queryClient.setQueryData<ProjectDetail>(
+        ["projects", projectId],
+        (prev) => {
+          if (!prev) return prev;
+
+          const generations = prev.generations.map((generation) => {
+            if (generation.generationId !== generationId) {
+              return generation;
+            }
+            return {
+              ...generation,
+              screens: generation.screens.filter(
+                (screen) => screen.id !== screenId,
+              ),
+            };
+          });
+
+          const frames = flattenGenerationFrames(generations);
+
+          return {
+            ...prev,
+            generations,
+            frames,
+          };
+        },
       );
     },
   });

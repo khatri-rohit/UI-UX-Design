@@ -1,4 +1,4 @@
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 // import { Client } from "@upstash/qstash";
 import { isAuthError, requireAuthContext } from "@/lib/get-auth";
 import logger from "@/lib/logger";
@@ -27,10 +27,11 @@ export async function POST(request: NextRequest) {
     });
 
     if (!authContext.appUserId) {
-      return new Response(
-        JSON.stringify({
-          error: "Unauthorized: Missing user ID in auth context",
-        }),
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Unauthorized: Missing user ID in auth context",
+        },
         { status: 401, headers: { "Content-Type": "application/json" } },
       );
     }

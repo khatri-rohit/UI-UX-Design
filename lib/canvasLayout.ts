@@ -1,7 +1,6 @@
 import { GenerationPlatform } from "./types";
 
 const H_GAP = 100; // gap between screens in same generation
-const V_GAP = 120; // gap between generations (vertical breathing room)
 
 interface ExistingFrameBounds {
   x: number;
@@ -17,23 +16,15 @@ export function getGenerationLayout(
   const startY =
     existingFrames.length === 0
       ? 0
-      : Math.max(...existingFrames.map((frame) => frame.y + frame.h)) + V_GAP;
+      : Math.min(...existingFrames.map((frame) => frame.y));
 
   // Position each screen with its actual width
   let currentX = 0;
-  const totalW = screens.reduce(
-    (sum, s, i) => sum + s.w + (i < screens.length - 1 ? H_GAP : 0),
-    0,
-  );
 
-  const centerX =
+  const startX =
     existingFrames.length === 0
       ? 0
-      : (Math.min(...existingFrames.map((frame) => frame.x)) +
-          Math.max(...existingFrames.map((frame) => frame.x + frame.w))) /
-        2;
-
-  const startX = centerX - totalW / 2;
+      : Math.max(...existingFrames.map((frame) => frame.x + frame.w)) + H_GAP;
 
   return screens.map((screen) => {
     const x = startX + currentX;
