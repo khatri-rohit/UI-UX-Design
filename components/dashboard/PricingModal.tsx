@@ -1,7 +1,6 @@
 "use client";
 
-import { Dispatch, SetStateAction, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Dispatch, SetStateAction } from "react";
 import { Check, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 import { JetBrains_Mono } from "next/font/google";
@@ -17,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
   useUsageQuery,
-  useSubscribeMutation,
+  useCreateSubscriptionMutation,
   useChangePlanMutation,
   useUndoPlanChangeMutation,
 } from "@/lib/billing/queries";
@@ -83,13 +82,12 @@ function FeatureValue({ value }: { value: boolean | string }) {
 }
 
 export function PricingModal({ open, onOpenChange }: PricingModalProps) {
-  const router = useRouter();
   const { data: usage, isLoading: usageLoading } = useUsageQuery();
   const {
     mutateAsync: subscribe,
     isPending: subscribing,
     isIdle: subscribeIdle,
-  } = useSubscribeMutation();
+  } = useCreateSubscriptionMutation();
   const {
     mutateAsync: changePlan,
     isPending: changing,
@@ -106,8 +104,6 @@ export function PricingModal({ open, onOpenChange }: PricingModalProps) {
       /* panel can stay open or close */
     },
   });
-
-  const [loading, setLoading] = useState(false);
 
   const anyLoading = subscribing || changing || undoing;
   const currentPlan = usage?.planId ?? "FREE";
@@ -164,8 +160,10 @@ export function PricingModal({ open, onOpenChange }: PricingModalProps) {
       toast.success(
         "Scheduled change cancelled. Your plan continues as normal.",
       );
-    } catch {
-      toast.error("Failed to undo change. Please try again.");
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } catch (error: any) {
+      logger.error("Failed to undo change: ", { error });
+      toast.error(error.message ?? "Failed to undo change. Please try again.");
     }
   };
 
@@ -213,7 +211,7 @@ export function PricingModal({ open, onOpenChange }: PricingModalProps) {
       }
       if (currentPlan === "PRO" && scheduledPlan === "STANDARD") {
         return {
-          label: `Scheduled ${periodEnd ?? ""}`,
+          label: `Scheduled ${periodEnd ?? "at period end"}`,
           variant: "scheduled",
           disabled: false,
         };
@@ -276,6 +274,44 @@ export function PricingModal({ open, onOpenChange }: PricingModalProps) {
   const freeCta = getCtaState("FREE");
   const standardCta = getCtaState("STANDARD");
   const proCta = getCtaState("PRO");
+
+  if (usageLoading) {
+    return (
+      <Drawer open={open} onOpenChange={onOpenChange} direction="right">
+        <DrawerContent className="dark bg-[#0f0f0f] border-l border-white/8 w-full! sm:max-w-4xl! h-full mt-0 rounded-none">
+          <DrawerHeader className="border-b border-white/8 px-6 py-5">
+            <div className="flex items-start justify-between">
+              <div>
+                <DrawerTitle className="text-white text-xl font-bold tracking-tight">
+                  Choose Your Plan
+                </DrawerTitle>
+                <DrawerDescription className="text-white/50 mt-1 text-sm">
+                  Loading...
+                </DrawerDescription>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => onOpenChange(false)}
+                className="text-white/40 hover:text-white"
+              >
+                <X className="size-4" />
+              </Button>
+            </div>
+          </DrawerHeader>
+
+          <div className="h-screen flex items-center justify-center bg-black text-white">
+            <div className="text-center space-y-3">
+              <p className="text-sm text-white/60">
+                Loading your subscription details...
+              </p>
+              <div className="animate-spin h-5 w-5 border border-white/20 border-t-white rounded-full mx-auto" />
+            </div>
+          </div>
+        </DrawerContent>
+      </Drawer>
+    );
+  }
 
   return (
     <Drawer open={open} onOpenChange={onOpenChange} direction="right">
@@ -426,13 +462,12 @@ export function PricingModal({ open, onOpenChange }: PricingModalProps) {
                   disabled={
                     plan.cta.disabled ||
                     anyLoading ||
-                    loading ||
                     !subscribeIdle ||
                     !changePlanIdle
                   }
                   size="sm"
                   className={cn(
-                    "mt-5 h-9 w-full text-xs font-semibold",
+                    "mt-5 h-9 w-full text-xs font-semibold cursor-pointer",
                     plan.cta.variant === "current"
                       ? "border border-white/8 bg-transparent text-white/30 cursor-default"
                       : plan.cta.variant === "upgrade"
@@ -478,16 +513,6 @@ export function PricingModal({ open, onOpenChange }: PricingModalProps) {
             </p>
           )}
         </div>
-        {loading && (
-          <div className="h-screen flex items-center justify-center bg-black text-white">
-            <div className="text-center space-y-3">
-              <p className="text-sm text-white/60">
-                Processing your subscription...
-              </p>
-              <div className="animate-spin h-5 w-5 border border-white/20 border-t-white rounded-full mx-auto" />
-            </div>
-          </div>
-        )}
       </DrawerContent>
     </Drawer>
   );

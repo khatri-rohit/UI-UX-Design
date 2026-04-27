@@ -54,7 +54,6 @@ export async function POST(req: NextRequest) {
     }
 
     // Create Razorpay subscription
-    // total_count: 0 means perpetual (renews until cancelled)
     const razorpaySub = await razorpay.subscriptions.create({
       plan_id: planConfig.razorpayPlanId,
       // customer_notify: 1, // Razorpay will send email to customer
@@ -65,11 +64,10 @@ export async function POST(req: NextRequest) {
         notify_phone: "",
         notify_email: authContext.email,
       },
-      // ADD THESE TWO LINES:
-      // callback_url: `${process.env.NEXT_PUBLIC_SITE_URL}/billing/success`,
-      // callback_method: "get",
     });
+
     logger.info("Razorpay subscription created", { razorpaySub });
+
     // Store the pending subscription ID — will be activated via webhook
     await prisma.subscription.update({
       where: { userId: authContext.appUserId },

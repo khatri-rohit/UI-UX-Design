@@ -62,7 +62,7 @@ export async function guardGenerationRequest(
       response: quotaExceededResponse(
         usage.generationsUsed,
         usage.generationLimit,
-        authContext.planId,
+        authContext.effectivePlanId,
       ),
     };
   }

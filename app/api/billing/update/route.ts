@@ -89,7 +89,6 @@ export async function POST(req: NextRequest) {
         {
           error: true,
           message: "Failed to update subscription.",
-          details: error,
         },
         { status: 500 },
       );
@@ -117,7 +116,6 @@ export async function POST(req: NextRequest) {
       {
         error: true,
         message: "Failed to update subscription.",
-        details: error,
       },
       { status: 500 },
     );

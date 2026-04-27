@@ -9,7 +9,6 @@ export interface PlanConfig {
   allowedModels: readonly string[];
   organizationEnabled: boolean;
   rolloverGenerations: number; // max rollover from previous period
-  // Razorpay plan IDs — set from env at runtime
   razorpayPlanId: string | null;
 }
 
@@ -61,7 +60,14 @@ export const PLAN_CONFIGS: Record<PlanId, PlanConfig> = {
 };
 
 export function getPlanConfig(planId: PlanId | string): PlanConfig {
-  return PLAN_CONFIGS[planId as PlanId] ?? PLAN_CONFIGS.FREE;
+  const cfg = PLAN_CONFIGS[planId as PlanId];
+  if (!cfg) {
+    if (process.env.NODE_ENV !== "production") {
+      console.warn(`[plans] Unknown planId "${planId}", falling back to FREE`);
+    }
+    return PLAN_CONFIGS.FREE;
+  }
+  return cfg;
 }
 
 export function isModelAllowed(
@@ -75,7 +81,10 @@ export function getEffectiveGenerationLimit(
   planId: PlanId | string,
   overrideLimit: number | null | undefined,
 ): number {
-  if (typeof overrideLimit === "number" && overrideLimit > 0)
+  if (
+    typeof overrideLimit === "number" &&
+    (overrideLimit > 0 || overrideLimit === -1)
+  )
     return overrideLimit;
   return getPlanConfig(planId).monthlyGenerationLimit;
 }
@@ -84,7 +93,10 @@ export function getEffectiveProjectLimit(
   planId: PlanId | string,
   overrideLimit: number | null | undefined,
 ): number {
-  if (typeof overrideLimit === "number" && overrideLimit > 0)
+  if (
+    typeof overrideLimit === "number" &&
+    (overrideLimit > 0 || overrideLimit === -1)
+  )
     return overrideLimit;
   return getPlanConfig(planId).projectLimit;
 }

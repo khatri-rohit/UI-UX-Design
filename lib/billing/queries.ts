@@ -29,6 +29,7 @@ export interface UserUsage {
 export const billingKeys = {
   all: ["billing"] as const,
   usage: () => [...billingKeys.all, "usage"] as const,
+  details: () => [...billingKeys.all, "details"] as const,
 };
 
 export function useUsageQuery() {
@@ -45,7 +46,7 @@ export function useUsageQuery() {
 export function useCreateSubscriptionMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (planId: "FREE" | "STANDARD" | "PRO") => {
+    mutationFn: async (planId: "STANDARD" | "PRO") => {
       return requestApi<{
         subscriptionId: string;
         shortUrl: string;
@@ -62,25 +63,25 @@ export function useCreateSubscriptionMutation() {
   });
 }
 
-export function useUpdateSubscriptionMutation() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (planId: "STANDARD" | "PRO") => {
-      return requestApi<{
-        planId: string;
-        status: string;
-        shortUrl: string | null;
-      }>("/api/billing/update", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ planId }),
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: billingKeys.all });
-    },
-  });
-}
+// export function useUpdateSubscriptionMutation() {
+//   const queryClient = useQueryClient();
+//   return useMutation({
+//     mutationFn: async (planId: "STANDARD" | "PRO") => {
+//       return requestApi<{
+//         planId: string;
+//         status: string;
+//         shortUrl: string | null;
+//       }>("/api/billing/update", {
+//         method: "POST",
+//         headers: { "Content-Type": "application/json" },
+//         body: JSON.stringify({ planId }),
+//       });
+//     },
+//     onSuccess: () => {
+//       queryClient.invalidateQueries({ queryKey: billingKeys.all });
+//     },
+//   });
+// }
 
 export function useCancelSubscriptionMutation() {
   const queryClient = useQueryClient();
@@ -96,7 +97,7 @@ export function useCancelSubscriptionMutation() {
 export function useGetSubscriptionDetailsQuery() {
   return useQuery(
     queryOptions({
-      queryKey: ["details"] as const,
+      queryKey: billingKeys.details(),
       queryFn: () => getCurrentSubscription(),
       staleTime: 60 * 1000,
       refetchOnWindowFocus: true,
@@ -140,26 +141,6 @@ export function useUndoPlanChangeMutation() {
   return useMutation({
     mutationFn: () =>
       requestApi("/api/billing/undo-change", { method: "POST" }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: billingKeys.all });
-    },
-  });
-}
-
-// Also extend useCreateSubscriptionMutation to accept the plan for FREE → paid flows:
-export function useSubscribeMutation() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (planId: "STANDARD" | "PRO") =>
-      requestApi<{
-        subscriptionId: string;
-        shortUrl: string;
-        razorpayKeyId: string;
-      }>("/api/billing/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ planId }),
-      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: billingKeys.all });
     },

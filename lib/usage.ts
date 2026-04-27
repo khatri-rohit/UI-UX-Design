@@ -27,18 +27,15 @@ function getPeriodBounds(billingAnchorDay: number | null): {
 } {
   const now = new Date();
   const anchor = billingAnchorDay ?? 1;
-  const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), anchor);
-  const nextMonthStart = new Date(
-    now.getFullYear(),
-    now.getMonth() + 1,
-    anchor,
-  );
-  const prevMonthStart = new Date(
-    now.getFullYear(),
-    now.getMonth() - 1,
-    anchor,
-  );
-
+  const clampedDay = (year: number, monthIdx: number) => {
+    const lastDay = new Date(year, monthIdx + 1, 0).getDate();
+    return Math.min(anchor, lastDay);
+  };
+  const y = now.getFullYear();
+  const m = now.getMonth();
+  const thisMonthStart = new Date(y, m, clampedDay(y, m));
+  const nextMonthStart = new Date(y, m + 1, clampedDay(y, m + 1));
+  const prevMonthStart = new Date(y, m - 1, clampedDay(y, m - 1));
   const periodStart = thisMonthStart <= now ? thisMonthStart : prevMonthStart;
   const periodEnd = thisMonthStart <= now ? nextMonthStart : thisMonthStart;
   return { periodStart, periodEnd };
@@ -48,7 +45,7 @@ export async function getOrCreateUsagePeriod(
   userId: string,
   effectivePlanOverride?: "FREE" | "STANDARD" | "PRO",
 ): Promise<UsageContext | null> {
-  let subscription = await prisma.subscription.findUnique({
+  const subscription = await prisma.subscription.findUnique({
     where: { userId },
     select: {
       id: true,
@@ -63,23 +60,7 @@ export async function getOrCreateUsagePeriod(
   });
 
   if (!subscription) {
-    // Safety net — auto-provision FREE subscription
-    const created = await prisma.subscription.upsert({
-      where: { userId },
-      create: { userId, planId: "FREE", status: "ACTIVE" },
-      update: {},
-      select: {
-        id: true,
-        planId: true,
-        status: true,
-        billingAnchorDay: true,
-        generationLimit: true,
-        projectLimit: true,
-        currentPeriodStart: true,
-        currentPeriodEnd: true,
-      },
-    });
-    subscription = created;
+    return null;
   }
 
   // const planId = subscription.planId as PlanId;
