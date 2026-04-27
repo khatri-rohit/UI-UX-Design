@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { billingKeys } from "@/lib/billing/queries";
@@ -7,7 +7,7 @@ import { billingKeys } from "@/lib/billing/queries";
 // This page is the fallback for environments where Razorpay.js
 // can't execute the handler function (e.g., mobile WebView).
 // In normal desktop/mobile browser flow, the modal handler fires instead.
-export default function BillingSuccessPage() {
+function BillingSuccessPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -54,4 +54,10 @@ export default function BillingSuccessPage() {
   if (status === "verifying") return <p>Verifying payment...</p>;
   if (status === "success") return <p>Subscription active! Redirecting...</p>;
   return <p>Verification failed. Contact support if you were charged.</p>;
+}
+
+export default function BillingSuccessPageWrapper() {
+  <Suspense fallback={<p>Loading...</p>}>
+    <BillingSuccessPage />
+  </Suspense>;
 }
