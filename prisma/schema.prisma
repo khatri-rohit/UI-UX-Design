@@ -244,7 +244,9 @@ model OrgInvitation {
     email          String // Invitee email — may not be a User yet
     role           OrgMemberRole       @default(MEMBER)
     status         OrgInvitationStatus @default(PENDING)
-    token          String              @unique // crypto.randomBytes(32).toString('hex')
+    token          String              @unique // raw token (legacy; will be removed)
+    tokenHash      String?             // bcrypt hash of token
+    tokenPrefix    String?             // first 8 chars of raw token for lookup
     invitedBy      String? // userId
     expiresAt      DateTime // createdAt + 7 days
     acceptedAt     DateTime?
@@ -256,6 +258,7 @@ model OrgInvitation {
 
     @@unique([organisationId, email]) // One pending invite per email per org
     @@index([token])
+    @@index([tokenPrefix, status])
     @@index([email, status])
 }
 

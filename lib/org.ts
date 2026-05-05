@@ -1,5 +1,6 @@
 import prisma from "@/lib/prisma";
 import crypto from "crypto";
+import bcrypt from "bcryptjs";
 
 export const ORG_MAX_SEATS_PRO = 5;
 export const ORG_INVITE_TTL_DAYS = 7;
@@ -22,11 +23,22 @@ const MAX_SLUG_ATTEMPTS = 25;
 export async function ensureUniqueSlug(baseSlug: string): Promise<string> {
   for (let attempt = 0; attempt < MAX_SLUG_ATTEMPTS; attempt++) {
     const slug = attempt === 0 ? baseSlug : `${baseSlug}-${attempt}`;
-    const existing = await prisma.organisation.findUnique({
-      where: { slug },
-      select: { id: true },
-    });
-    if (!existing) return slug;
+    try {
+      const existing = await prisma.organisation.findUnique({
+        where: { slug },
+        select: { id: true },
+      });
+      if (!existing) return slug;
+    } catch (error) {
+      // If a concurrent create just took this slug, retry with next suffix
+      if (
+        error instanceof Error &&
+        error.message.includes("Unique constraint failed")
+      ) {
+        continue;
+      }
+      throw error;
+    }
   }
   // Final fallback: append a short random suffix to defeat collisions / races.
   return `${baseSlug}-${crypto.randomBytes(3).toString("hex")}`;
@@ -64,23 +76,60 @@ export async function createOrganisation({
   const baseSlug = generateOrgSlug(name);
   const slug = await ensureUniqueSlug(baseSlug);
 
-  return prisma.$transaction(async (tx) => {
-    const org = await tx.organisation.create({
-      data: { name, slug, ownerId, maxSeats: ORG_MAX_SEATS_PRO },
-    });
+  try {
+    return await prisma.$transaction(
+      async (tx) => {
+        const org = await tx.organisation.create({
+          data: { name, slug, ownerId, maxSeats: ORG_MAX_SEATS_PRO },
+        });
 
-    // Owner is always the first ACTIVE OWNER-role member
-    await tx.orgMembership.create({
-      data: {
-        organisationId: org.id,
-        userId: ownerId,
-        role: "OWNER",
-        status: "ACTIVE",
+        // Owner is always the first ACTIVE OWNER-role member
+        await tx.orgMembership.create({
+          data: {
+            organisationId: org.id,
+            userId: ownerId,
+            role: "OWNER",
+            status: "ACTIVE",
+          },
+        });
+
+        return org;
       },
-    });
+      {
+        isolationLevel: "Serializable",
+      },
+    );
+  } catch (error) {
+    // On unique-constraint race, retry with next suffix
+    if (
+      error instanceof Error &&
+      error.message.includes("Unique constraint failed on the fields: (`slug`)")
+    ) {
+      const nextSlug = `${baseSlug}-${crypto.randomBytes(3).toString("hex")}`;
+      return prisma.$transaction(
+        async (tx) => {
+          const org = await tx.organisation.create({
+            data: { name, slug: nextSlug, ownerId, maxSeats: ORG_MAX_SEATS_PRO },
+          });
 
-    return org;
-  });
+          await tx.orgMembership.create({
+            data: {
+              organisationId: org.id,
+              userId: ownerId,
+              role: "OWNER",
+              status: "ACTIVE",
+            },
+          });
+
+          return org;
+        },
+        {
+          isolationLevel: "Serializable",
+        },
+      );
+    }
+    throw error;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -97,7 +146,9 @@ export async function createInvitation({
   role: "ADMIN" | "MEMBER";
   invitedBy: string;
 }) {
-  const token = crypto.randomBytes(32).toString("hex");
+  const rawToken = crypto.randomBytes(32).toString("hex");
+  const tokenHash = await bcrypt.hash(rawToken, 10);
+  const tokenPrefix = rawToken.slice(0, 8);
   const expiresAt = new Date(
     Date.now() + ORG_INVITE_TTL_DAYS * 24 * 60 * 60 * 1000,
   );
@@ -111,7 +162,15 @@ export async function createInvitation({
   if (existing && existing.status === "PENDING") {
     return prisma.orgInvitation.update({
       where: { id: existing.id },
-      data: { token, expiresAt, role, invitedBy, status: "PENDING" },
+      data: {
+        token: rawToken,
+        tokenHash,
+        tokenPrefix,
+        expiresAt,
+        role,
+        invitedBy,
+        status: "PENDING",
+      },
     });
   }
 
@@ -121,20 +180,61 @@ export async function createInvitation({
       email,
       role,
       status: "PENDING",
-      token,
+      token: rawToken,
+      tokenHash,
+      tokenPrefix,
       invitedBy,
       expiresAt,
     },
   });
 }
 
+type InvitationWithOrg = Awaited<
+  ReturnType<
+    typeof prisma.orgInvitation.findUnique<{
+      where: { id: string };
+      include: {
+        organisation: { select: { id: true; maxSeats: true } };
+      };
+    }>
+  >
+>;
+
 export async function acceptInvitation(token: string, acceptingUserId: string) {
-  const invitation = await prisma.orgInvitation.findUnique({
-    where: { token },
+  let invitation: InvitationWithOrg | null = null;
+
+  // Try modern bcrypt-based lookup first
+  const tokenPrefix = token.slice(0, 8);
+  const candidates = await prisma.orgInvitation.findMany({
+    where: {
+      tokenPrefix,
+      status: "PENDING",
+      expiresAt: { gt: new Date() },
+    },
     include: {
       organisation: { select: { id: true, maxSeats: true } },
     },
   });
+
+  for (const candidate of candidates) {
+    if (
+      candidate.tokenHash &&
+      (await bcrypt.compare(token, candidate.tokenHash))
+    ) {
+      invitation = candidate as InvitationWithOrg;
+      break;
+    }
+  }
+
+  // Fallback to legacy plaintext token lookup
+  if (!invitation) {
+    invitation = await prisma.orgInvitation.findUnique({
+      where: { token },
+      include: {
+        organisation: { select: { id: true, maxSeats: true } },
+      },
+    });
+  }
 
   if (!invitation)
     throw new OrgError("INVITE_NOT_FOUND", "Invitation not found.", 404);
