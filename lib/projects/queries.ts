@@ -14,6 +14,7 @@ import {
   ProjectSummary,
 } from "../api/types";
 import { CanvasFrameSnapshot, CanvasSnapshotV1 } from "@/lib/canvas-state";
+import { useProjectsCacheStore } from "@/stores/projects-cache";
 
 type CreateProjectInput = {
   prompt: string;
@@ -36,9 +37,12 @@ export const projectKeys = {
 };
 
 async function listProjects() {
-  return requestApi<ProjectSummary[]>("/api/projects/all", {
+  const data = await requestApi<ProjectSummary[]>("/api/projects/all", {
     next: { tags: ["projects:list"] },
   });
+
+  useProjectsCacheStore.getState().setProjects(data);
+  return data;
 }
 
 async function createProject({ prompt, platform }: CreateProjectInput) {
@@ -68,8 +72,11 @@ export function projectsListQueryOptions() {
 }
 
 export function useProjectsQuery() {
+  const cachedProjects = useProjectsCacheStore((state) => state.projects);
+
   return useQuery({
     ...projectsListQueryOptions(),
+    initialData: cachedProjects ?? undefined,
     refetchInterval: (query) => {
       const projects = query.state.data;
       return projects?.some(
@@ -88,34 +95,6 @@ export function useCreateProjectMutation() {
   return useMutation({
     mutationFn: createProject,
     onSuccess: async () => {
-      // queryClient.setQueryData<ProjectSummary[]>(
-      //   projectKeys.list(),
-      //   (currentProjects) => {
-      //     if (!currentProjects) {
-      //       return currentProjects;
-      //     }
-
-      //     if (
-      //       currentProjects.some(
-      //         (project) => project.id === createdProject.projectId,
-      //       )
-      //     ) {
-      //       return currentProjects;
-      //     }
-
-      //     return [
-      //       {
-      //         id: createdProject.projectId,
-      //         title: createdProject.title,
-      //         description: createdProject.description,
-      //         thumbnailUrl: null,
-      //         updatedAt: createdProject.updatedAt,
-      //       },
-      //       ...currentProjects,
-      //     ];
-      //   },
-      // );
-
       await queryClient.invalidateQueries({ queryKey: projectKeys.all });
     },
   });
@@ -227,6 +206,14 @@ export function useProjectDeleteMutation() {
       );
       // Invalidate detail
       queryClient.removeQueries({ queryKey: ["projects", id], exact: true });
+
+      // Update Zustand cache
+      const currentCache = useProjectsCacheStore.getState().projects;
+      if (currentCache) {
+        useProjectsCacheStore
+          .getState()
+          .setProjects(currentCache.filter((p) => p.id !== id));
+      }
     },
   });
 }
@@ -257,6 +244,29 @@ export function useProjectStatusUpdateMutation() {
       queryClient.setQueryData<ProjectDetail>(["projects", id], (prev) =>
         mergePatchedProjectDetail(prev, data),
       );
+
+      // Update list cache
+      queryClient.setQueryData<ProjectSummary[]>(projectKeys.list(), (prev) =>
+        prev?.map((project) =>
+          project.id === id
+            ? { ...project, status: data.project.status }
+            : project,
+        ),
+      );
+
+      // Update Zustand cache
+      const currentCache = useProjectsCacheStore.getState().projects;
+      if (currentCache) {
+        useProjectsCacheStore
+          .getState()
+          .setProjects(
+            currentCache.map((project) =>
+              project.id === id
+                ? { ...project, status: data.project.status }
+                : project,
+            ),
+          );
+      }
     },
   });
 }
@@ -302,6 +312,24 @@ export function useProjectMetadataUpdateMutation() {
             : project,
         ),
       );
+
+      // Update Zustand cache
+      const currentCache = useProjectsCacheStore.getState().projects;
+      if (currentCache) {
+        useProjectsCacheStore
+          .getState()
+          .setProjects(
+            currentCache.map((project) =>
+              project.id === id
+                ? {
+                    ...project,
+                    title: data.project.title,
+                    description: data.project.description,
+                  }
+                : project,
+            ),
+          );
+      }
     },
   });
 }
@@ -395,6 +423,20 @@ export function useProjectThumbnailUpdateMutation() {
             : project,
         ),
       );
+
+      // Update Zustand cache
+      const currentCache = useProjectsCacheStore.getState().projects;
+      if (currentCache) {
+        useProjectsCacheStore
+          .getState()
+          .setProjects(
+            currentCache.map((project) =>
+              project.id === id
+                ? { ...project, thumbnailUrl: data.thumbnailUrl }
+                : project,
+            ),
+          );
+      }
     },
   });
 }
